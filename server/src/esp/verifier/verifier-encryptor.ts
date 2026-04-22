@@ -11,17 +11,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 1. Pre-load the Private Key from ENV
-const PRIVATE_KEY = env.PRIVATE_PEM_B64
-    ? Buffer.from(env.PRIVATE_PEM_B64, 'base64').toString('utf8')
+const VERIFY_PRIVATE_KEY = env.VERIFY_PRIVATE_PEM_B64
+    ? Buffer.from(env.VERIFY_PRIVATE_PEM_B64, 'base64').toString('utf8')
     : null;
 
 // cache it for performance later
-const PUBLIC_KEY_PATH = path.join(__dirname, 'public.pem');
-let PUBLIC_KEY: string | null = null;
+const PUBLIC_KEY_PATH = path.join(__dirname, 'verify-public.pem');
+let VERIFY_PUBLIC_KEY: string | null = null;
 
 try {
     if (fs.existsSync(PUBLIC_KEY_PATH)) {
-        PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+        VERIFY_PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
     }
 } catch (err) {
     console.warn("⚠️ Public key file not found or unreadable at startup.");
@@ -31,7 +31,7 @@ try {
  * ✅ Decrypt payload using Private Key
  */
 export function decryptVerificationId(base64Encrypted: string): string {
-    if (!PRIVATE_KEY) {
+    if (!VERIFY_PRIVATE_KEY) {
         throw new Error("❌ Server Configuration Error: Private Key missing");
     }
 
@@ -40,7 +40,7 @@ export function decryptVerificationId(base64Encrypted: string): string {
 
         const decrypted = crypto.privateDecrypt(
             {
-                key: PRIVATE_KEY,
+                key: VERIFY_PRIVATE_KEY,
                 padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
                 oaepHash: "sha256",
             },
@@ -58,7 +58,7 @@ export function decryptVerificationId(base64Encrypted: string): string {
  * ✅ Encrypt response using Public Key
  */
 export function encryptVerificationId(text: string): string {
-    if (!PUBLIC_KEY) {
+    if (!VERIFY_PUBLIC_KEY) {
         throw new Error("❌ Server Configuration Error: Public Key missing");
     }
 
@@ -67,7 +67,7 @@ export function encryptVerificationId(text: string): string {
 
         const encrypted = crypto.publicEncrypt(
             {
-                key: PUBLIC_KEY,
+                key: VERIFY_PUBLIC_KEY,
                 padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
                 oaepHash: "sha256",
             },

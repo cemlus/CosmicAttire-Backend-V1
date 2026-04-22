@@ -15,7 +15,7 @@ const PRIVATE_KEY = process.env.PRIVATE_PEM_B64
   : null;
 
 // Load Public Key from local file once at startup
-const PUBLIC_KEY_PATH = path.join(__dirname, 'keys/public.pem');
+const PUBLIC_KEY_PATH = path.join(__dirname, 'public.pem');
 let PUBLIC_KEY: string | null = null;
 
 try {
@@ -58,7 +58,7 @@ export function decryptPayload(base64Encrypted: string): string {
  * ✅ Encrypt response using Public Key
  * Used to send secret messages TO the ESP32
  */
-export function encryptResponse(text: string): string {
+export function encryptPayload(text: string): string {
   if (!PUBLIC_KEY) {
     throw new Error("Server Configuration Error: public.pem file missing in directory");
   }

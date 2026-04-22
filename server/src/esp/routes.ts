@@ -1,5 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { decryptPayload, encryptResponse } from "./crypto.js";
+import { decryptPayload, encryptPayload } from "./crypto.js";
 import { getUserById, getCredentialByMac } from "../db/db.js";
 import { encryptVerificationId } from "./verifier/verifier-encryptor.js";
 
@@ -38,7 +38,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const timeDiff = Math.abs(now - timestamp); 
     if (timeDiff > 120) {
       return res.status(403).json({ 
-        data: encryptResponse("ERROR: Clock drift too high or Replay detected") 
+        data: encryptPayload("ERROR: Clock drift too high or Replay detected") 
       });
     }
 
@@ -49,7 +49,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     ])
 
     if (!credential) {
-      return res.json({ data: encryptResponse("ACCESS DENIED: Unrecognized Hardware") });
+      return res.json({ data: encryptPayload("ACCESS DENIED: Unrecognized Hardware") });
     }
 
     // 4. Geofence Validation
@@ -57,17 +57,17 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const radiusKM = credential.radius_m / 1000;
     
     if (dist > radiusKM) {
-      return res.json({ data: encryptResponse("ACCESS DENIED: Location Mismatch") });
+      return res.json({ data: encryptPayload("ACCESS DENIED: Location Mismatch") });
     }
 
     // 5. NFC Hardware ID Validation
     if (credential.nfc_id && credential.nfc_id !== nfc_id) {
-      return res.json({ data: encryptResponse("ACCESS DENIED: Hardware Tampered") });
+      return res.json({ data: encryptPayload("ACCESS DENIED: Hardware Tampered") });
     }
 
     // 6. Check user permission (Must be "yes")
     if (!user || user.permission?.toLowerCase() !== "yes") {
-      return res.json({ data: encryptResponse("ACCESS DENIED: User Unauthorized") });
+      return res.json({ data: encryptPayload("ACCESS DENIED: User Unauthorized") });
     }
 
     // 7. Success - Generate the one-time verification link
@@ -75,7 +75,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const verificationLink = `https://yourdomain.com/verification-1/${encryptedId}`;
     
     return res.json({ 
-      data: encryptResponse(`SUCCESS:${verificationLink}`) 
+      data: encryptPayload(`SUCCESS:${verificationLink}`) 
     });
 
   } catch (err) {

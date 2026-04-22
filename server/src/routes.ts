@@ -122,12 +122,12 @@ router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response
             return res.status(404).json({ error: "User not found" });
         }
 
-        res.json({
-            user_id: userId, // Using the decrypted ID directly
+        res.status(200).json({
+            user_id: userId, 
             permission: user.permission,
             zone: "General Access",
             timestamp: user.timestamp,
-            name: user.name, // Already extracted in db.ts
+            name: user.name, 
             image_url: user.image_url,
         });
     } catch (err: any) {

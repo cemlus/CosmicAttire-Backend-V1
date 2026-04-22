@@ -7,6 +7,7 @@ const envSchema = z.object({
     SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
     SUPABASE_SECRET_KEY: z.string().min(1),
     PROFILE_ENCRYPTION_KEY: z.string().min(1),
+    PRIVATE_PEM_B64: z.string().min(1),
 })
 
 export const env = envSchema.parse(process.env);

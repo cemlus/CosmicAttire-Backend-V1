@@ -1,17 +1,16 @@
-// server/server.js
 import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
-
 import routes from "./routes.js";
+import espRouter from "./esp/routes.js";
+import { env } from "./config.js";
 
 const app = express();
 
 app.use(express.json());
 
 app.use("/api", routes);
+app.use("/api/esp", espRouter);
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

@@ -1,0 +1,110 @@
+import express, { type Request, type Response, Router } from "express";
+import { decryptPayload, encryptResponse } from "./crypto.js";
+import { getUserById, getCredentialByMac } from "../db/db.js";
+import { encryptVerificationId } from "./verifier/verifier-encryptor.js";
+
+const espRouter: Router = express.Router();
+
+interface ESPPayload {
+  user_id: string;
+  mac: string;
+  nfc_id: string;
+  timestamp: number;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * ✅ POST /verify-user-by-id
+ * Payload is sent in the Request Body as { "data": "BASE64_ENCRYPTED_STRING" }
+ */
+espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
+  const { data: encryptedPayload } = req.body;
+
+  if (!encryptedPayload) {
+    return res.status(400).json({ error: "Missing encrypted payload" });
+  }
+
+  try {
+    // 1. Decrypt the ESP32 payload
+    const decrypted = decryptPayload(encryptedPayload);
+    const payload: ESPPayload = JSON.parse(decrypted);
+    console.log("🔓 Decrypted ESP payload:", payload);
+
+    const { user_id, mac, nfc_id, timestamp, lat, lng } = payload;
+
+    // 2. Validate timestamp (2 minute window / 120 seconds)
+    const now = Math.floor(Date.now() / 1000);
+    const timeDiff = Math.abs(now - timestamp); 
+    if (timeDiff > 120) {
+      return res.status(403).json({ 
+        data: encryptResponse("ERROR: Clock drift too high or Replay detected") 
+      });
+    }
+
+    // 3. Lookup Hardware Credential and User in Supabase
+    const [credential, user] = await Promise.all([
+      getCredentialByMac(mac),
+      getUserById(user_id)
+    ])
+
+    if (!credential) {
+      return res.json({ data: encryptResponse("ACCESS DENIED: Unrecognized Hardware") });
+    }
+
+    // 4. Geofence Validation
+    const dist = getDistanceKM(lat, lng, credential.lat, credential.lng);
+    const radiusKM = credential.radius_m / 1000;
+    
+    if (dist > radiusKM) {
+      return res.json({ data: encryptResponse("ACCESS DENIED: Location Mismatch") });
+    }
+
+    // 5. NFC Hardware ID Validation
+    if (credential.nfc_id && credential.nfc_id !== nfc_id) {
+      return res.json({ data: encryptResponse("ACCESS DENIED: Hardware Tampered") });
+    }
+
+    // 6. Check user permission (Must be "yes")
+    if (!user || user.permission?.toLowerCase() !== "yes") {
+      return res.json({ data: encryptResponse("ACCESS DENIED: User Unauthorized") });
+    }
+
+    // 7. Success - Generate the one-time verification link
+    const encryptedId = encryptVerificationId(user_id);
+    const verificationLink = `https://yourdomain.com/verification-1/${encryptedId}`;
+    
+    return res.json({ 
+      data: encryptResponse(`SUCCESS:${verificationLink}`) 
+    });
+
+  } catch (err) {
+    console.error("❌ ESP /verify error:", (err as Error).message);
+    return res.status(400).json({ error: "Security validation failed" });
+  }
+});
+
+/**
+ * 🌍 Helper: Haversine formula for Geofencing
+ */
+function getDistanceKM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; 
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function deg2rad(deg: number): number {
+  return deg * (Math.PI / 180);
+}
+
+export default espRouter;
+
+// # TODO 
+// 1. add better security between ESP and server communication
+// 2. add an alternate for Geo-Fencing since the current logic is practically Bullshit

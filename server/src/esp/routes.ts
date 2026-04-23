@@ -1,7 +1,7 @@
 import express, { type Request, type Response, Router } from "express";
 import { decryptPayload, encryptPayload } from "./crypto.js";
 import { getUserById, getCredentialByMac } from "../db/db.js";
-import { encryptVerificationId } from "./verifier/verifier-encryptor.js";
+import { decrypt, encrypt } from "../encryptor.js";
 
 const espRouter: Router = express.Router();
 
@@ -28,7 +28,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
   try {
     // 1. Decrypt the ESP32 payload
     const decrypted = decryptPayload(encryptedPayload);
-    const payload: ESPPayload = JSON.parse(decrypted);
+    const payload: ESPPayload = JSON.parse(decrypted as string);
     console.log("🔓 Decrypted ESP payload:", payload);
 
     const { user_id, mac, nfc_id, timestamp, lat, lng } = payload;
@@ -71,7 +71,12 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     }
 
     // 7. Success - Generate the one-time verification link
-    const encryptedId = encryptVerificationId(user_id);
+    const payloadObject = JSON.stringify({
+      user_id: user_id,
+      exp: Date.now() + 300000
+    })
+
+    const encryptedId = encrypt(payloadObject);
     const verificationLink = `https://yourdomain.com/verification-1/${encryptedId}`;
     
     return res.json({ 

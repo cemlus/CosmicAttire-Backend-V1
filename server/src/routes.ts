@@ -8,7 +8,6 @@ import {
 } from "./db/db.js";
 
 import { decrypt } from "./encryptor.js";
-import { decryptVerificationId } from "./esp/verifier/verifier-encryptor.js";
 
 const router = express.Router();
 
@@ -113,8 +112,19 @@ router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response
             console.error("❌ No encryptedId passed");
             return;
         }
-        const userId = decryptVerificationId(encryptedId);
+        const decryptStr = decrypt(encryptedId);
+        if (!decryptStr) throw new Error("invalid or tampered verification ID");
+
+        const parsedPayload = JSON.parse(decryptStr);
+        const userId = parsedPayload.user_id;
+        const expiresAt = parsedPayload.exp;
+
         if (!userId) throw new Error("Invalid verification ID");
+        
+        if (Date.now() > expiresAt) {
+            console.warn(`⚠️ Blocked expired verification attempt for user: ${userId}`);
+            return res.status(403).json({ error: "This verification link has expired. Please scan your ring again." });
+        }     
 
         const user = await getUserById(userId);
 
@@ -123,11 +133,11 @@ router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response
         }
 
         res.status(200).json({
-            user_id: userId, 
+            user_id: userId,
             permission: user.permission,
             zone: "General Access",
             timestamp: user.timestamp,
-            name: user.name, 
+            name: user.name,
             image_url: user.image_url,
         });
     } catch (err: any) {

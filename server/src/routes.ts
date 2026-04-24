@@ -113,8 +113,7 @@ router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response
             return;
         }
         const userId = decrypt(encryptedId);
-
-        if (!userId) throw new Error("Invalid verification ID");    
+        if (!userId) throw new Error("Invalid verification ID");
 
         const user = await getUserById(userId);
 

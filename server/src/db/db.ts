@@ -165,7 +165,7 @@ export async function updateTokenAmount(username: string, token: string, newToke
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
     .from("verification_credentials")
-    .select("lat, lng, radius_m, label")
+    .select("lat, lng, radius_m, label, nfc_id")
     .eq("mac_address", mac_address)
     .single();
 

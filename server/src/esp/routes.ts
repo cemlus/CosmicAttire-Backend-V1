@@ -60,9 +60,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     }
 
     // 5. NFC Hardware ID Validation
-    const ring = await getRingByNFCId(nfc_id);
-    
-    if (!ring?.ring_id && ring?.ring_id !== nfc_id) {
+    if (credential.nfc_id && credential.nfc_id !== nfc_id) {
       return res.json({ data: encryptPayload("ACCESS DENIED: Hardware Tampered") });
     }
 

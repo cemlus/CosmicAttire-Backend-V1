@@ -112,19 +112,9 @@ router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response
             console.error("❌ No encryptedId passed");
             return;
         }
-        const decryptStr = decrypt(encryptedId);
-        if (!decryptStr) throw new Error("invalid or tampered verification ID");
+        const userId = decrypt(encryptedId);
 
-        const parsedPayload = JSON.parse(decryptStr);
-        const userId = parsedPayload.user_id;
-        const expiresAt = parsedPayload.exp;
-
-        if (!userId) throw new Error("Invalid verification ID");
-        
-        if (Date.now() > expiresAt) {
-            console.warn(`⚠️ Blocked expired verification attempt for user: ${userId}`);
-            return res.status(403).json({ error: "This verification link has expired. Please scan your ring again." });
-        }     
+        if (!userId) throw new Error("Invalid verification ID");    
 
         const user = await getUserById(userId);
 

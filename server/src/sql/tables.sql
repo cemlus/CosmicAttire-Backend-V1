@@ -40,8 +40,8 @@ create table if not exists public.rings (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   ring_id text not null unique,
-  nickname text not null default '',
-  status text not null default 'active'
+  nickname text not null default '',            
+  status text not null default 'active'           -- this is valid for the payment part only
     check (status in ('active', 'temp_blocked', 'permanent_blocked')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

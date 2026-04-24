@@ -1,5 +1,6 @@
 import path from 'path';
 import { supabase } from './supaBaseClient.js';
+import { resolve } from 'dns';
 
 /**
  * Helper: Extract name from the jsonb public_data field
@@ -164,12 +165,42 @@ export async function updateTokenAmount(username: string, token: string, newToke
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
     .from("verification_credentials")
-    .select("lat, lng, radius_m, label, nfc_id")
+    .select("lat, lng, radius_m, label")
     .eq("mac_address", mac_address)
     .single();
 
   if (error || !data) {
     console.warn("⚠️ MAC not found in verification_credentials:", mac_address);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getUserIdByNFCId(nfc_id: string) {
+  const { data, error } = await supabase
+    .from("rings")
+    .select("user_id")
+    .eq("ring_id", nfc_id)
+    .single();
+
+  if (error || !data) {
+    console.warn("⚠️ Not a valid NFC-ID", nfc_id);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getRingByNFCId(nfc_id: string) {
+  const { data, error } = await supabase
+    .from("rings")
+    .select("ring_id")
+    .eq("ring_id", nfc_id)
+    .single();
+
+  if (error || !data) {
+    console.warn("⚠️ Not a valid NFC-ID", nfc_id);
     return null;
   }
 

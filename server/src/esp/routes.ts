@@ -1,7 +1,8 @@
 import express, { type Request, type Response, Router } from "express";
 import { decryptPayload, encryptPayload } from "./crypto.js";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByNFCId } from "../db/db.js";
-import { decrypt, encrypt } from "../encryptor.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId } from "../db/db.js";
+import { encrypt } from "../encryptor.js";
+import { supabase } from "../db/supaBaseClient.js";
 
 const espRouter: Router = express.Router();
 
@@ -19,7 +20,7 @@ interface ESPPayload {
  */
 espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
   const { data: encryptedPayload } = req.body;
-  
+
   // console.log("this is the encrypted payload: ", encryptedPayload);
 
   if (!encryptedPayload) {
@@ -76,7 +77,8 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     // 7. Success - Generate the one-time verification link
 
     const encryptedId = encrypt(userId?.user_id as string);
-    const verificationLink = `https://yourdomain.com/verification-1/${encryptedId}`;
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
 
     return res.json({
       data: encryptPayload(`SUCCESS:${verificationLink}`)
@@ -85,6 +87,235 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("❌ ESP /verify error:", (err as Error).message);
     return res.status(400).json({ error: "Security validation failed" });
+  }
+});
+
+/**
+ * ✅ POST /verify
+ * { ring_id, mac_address, shopkeeper_id, amount, timestamp, lat, lng }
+ */
+espRouter.post("/verify", async (req: Request, res: Response) => {
+  try {
+    const { data: encryptedPayload } = req.body;
+
+    if (!encryptedPayload) {
+      return res.status(400).json({ error: "Missing encrypted payload" });
+    }
+
+    const decryptedPayload = decryptPayload(encryptedPayload);
+    const {
+      nfc_id,
+      mac_address,
+      shopkeeper_id,
+      amount,
+      timestamp,
+      lat,
+      lng,
+    } = JSON.parse(decryptedPayload);
+
+    if (
+      !nfc_id ||
+      !mac_address ||
+      !shopkeeper_id ||
+      amount == null ||
+      timestamp == null ||
+      lat == null ||
+      lng == null
+    ) {
+      console.error("❌ All credentials are not passed");
+      return res.status(400).json({ error: "Verification failed" });
+    }
+
+  // checking timestamp and amount validity
+    const amountNum = Number(amount);
+    const tsNum = Number(timestamp);
+
+  
+    if (!Number.isFinite(amountNum) || amountNum <= 0 || !Number.isInteger(amountNum)) {
+      return res.status(400).json({
+        data: encryptPayload("ERROR: Invalid token amount"),
+      });
+    }
+
+    if (!Number.isFinite(tsNum)) {
+      return res.status(400).json({
+        data: encryptPayload("ERROR: Invalid timestamp"),
+      });
+    }
+
+    // Accept either seconds or milliseconds
+    const nowMs = Date.now();
+    const payloadMs = tsNum > 1e12 ? tsNum : tsNum * 1000;
+    const timeDiff = Math.abs(nowMs - payloadMs);
+
+    if (timeDiff > 120000) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Clock drift too high or Replay detected"),
+      });
+    }
+
+    // Check 2 -> Verify device
+    const paymentDevice = await getPaymentMachine(mac_address);
+
+    if (!paymentDevice || paymentDevice.mac_address !== mac_address) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Payment device doesn't exist"),
+      });
+    }
+
+    // Check 3 -> Verify shopkeeper matches the device
+    if (String(paymentDevice.shopkeeper_id) !== String(shopkeeper_id)) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Shopkeeper does not match device"),
+      });
+    }
+
+    // Check 4 -> Ring validation
+    const ring = await getRingFromRingId(nfc_id);
+
+    if (!ring || ring.ring_id !== nfc_id) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Invalid Ring"),
+      });
+    }
+
+    const customerId = ring.user_id;
+
+    const user = await getUserIdByNFCId(nfc_id);
+    if (!user || String(user.user_id) !== String(customerId)) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Ring doesn't belong to user"),
+      });
+    }
+
+    // Check 5 -> Wallet validation
+    const customerWallet = await getWalletByUserId(customerId);
+    const shopkeeperWallet = await getWalletByUserId(shopkeeper_id);
+
+    if (!customerWallet) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Customer wallet not found"),
+      });
+    }
+
+    if (!shopkeeperWallet) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Shopkeeper wallet not found"),
+      });
+    }
+
+    if (amountNum > Number(customerWallet.balance)) {
+      return res.status(403).json({
+        data: encryptPayload("ERROR: Insufficient balance in wallet"),
+      });
+    }
+
+    // Transaction logic
+
+    const newCustomerBalance = Number(customerWallet.balance) - amountNum;
+    const newShopkeeperBalance = Number(shopkeeperWallet.balance) + amountNum;
+
+    // Update customer wallet
+    const { error: debitError } = await supabase
+      .from("wallets")
+      .update({
+        balance: newCustomerBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", customerId);
+
+    if (debitError) {
+      console.error("❌ Debit failed:", debitError.message);
+      return res.status(500).json({
+        data: encryptPayload("ERROR: Failed to debit customer wallet"),
+      });
+    }
+
+    // Update shopkeeper wallet
+    const { error: creditError } = await supabase
+      .from("wallets")
+      .update({
+        balance: newShopkeeperBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", shopkeeper_id);
+
+    if (creditError) {
+      console.error("❌ Credit failed:", creditError.message);
+
+      // Best-effort rollback for now
+      await supabase
+        .from("wallets")
+        .update({
+          balance: Number(customerWallet.balance),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", customerId);
+
+      return res.status(500).json({
+        data: encryptPayload("ERROR: Failed to credit shopkeeper wallet"),
+      });
+    }
+
+    // Insert transaction record
+    const { data: txData, error: txError } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: customerId,
+        ring_id: nfc_id,
+        amount: amountNum,
+        type: "payment",
+        description: "Ring payment",
+        merchant: paymentDevice.mac_address,
+        category: "payment",
+        location: paymentDevice.location ?? null,
+        status: "completed",
+      })
+      .select("id")
+      .single();
+
+    if (txError) {
+      console.error("❌ Transaction insert failed:", txError.message);
+
+      // Best-effort rollback for now
+      await supabase
+        .from("wallets")
+        .update({
+          balance: Number(customerWallet.balance),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", customerId);
+
+      await supabase
+        .from("wallets")
+        .update({
+          balance: Number(shopkeeperWallet.balance),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", shopkeeper_id);
+
+      return res.status(500).json({
+        data: encryptPayload("ERROR: Failed to save transaction"),
+      });
+    }
+
+    return res.status(200).json({
+      data: encryptPayload(
+        JSON.stringify({
+          status: "SUCCESS",
+          message: "Tokens transferred successfully",
+          transaction_id: txData.id,
+          customer_id: customerId,
+          shopkeeper_id,
+          amount: amountNum,
+        })
+      ),
+    });
+  } catch (err) {
+    console.error("❌ Payment verification flow failed:", (err as Error).message);
+    return res.status(500).json({
+      error: "Payment verification flow failed",
+    });
   }
 });
 

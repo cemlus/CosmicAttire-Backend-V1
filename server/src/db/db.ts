@@ -1,6 +1,5 @@
 import path from 'path';
 import { supabase } from './supaBaseClient.js';
-import { resolve } from 'dns';
 
 /**
  * Helper: Extract name from the jsonb public_data field
@@ -193,15 +192,45 @@ export async function getUserIdByNFCId(nfc_id: string) {
   return data;
 }
 
-export async function getRingByNFCId(nfc_id: string) {
+export async function getPaymentMachine(mac_address: string) {
   const { data, error } = await supabase
-    .from("rings")
-    .select("ring_id")
-    .eq("ring_id", nfc_id)
+    .from("payment_devices")
+    .select("shopkeeper_id, mac_address, location")
+    .eq("mac_address", mac_address)
     .single();
 
   if (error || !data) {
-    console.warn("⚠️ Not a valid NFC-ID", nfc_id);
+    console.warn("⚠️ Not a valid MAC-Address", mac_address);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getRingFromRingId(ring_id: string){
+  const { data, error } = await supabase
+    .from("rings")
+    .select("ring_id, status, user_id")
+    .eq("ring_id", ring_id)
+    .single();
+
+  if (error || !data) {
+    console.warn("⚠️ Not a valid MAC-Address", ring_id);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getWalletByUserId(user_id: string){
+  const { data, error } = await supabase
+    .from("wallets")
+    .select("balance, user_id")
+    .eq("user_id", user_id)
+    .single();
+
+  if (error || !data) {
+    console.warn("⚠️ Not a valid MAC-Address", user_id);
     return null;
   }
 

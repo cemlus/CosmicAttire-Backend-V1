@@ -103,19 +103,27 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
 
 /**
  * ✅ ESP encrypted user verification
- * 
+ * http://localhost:8080/api/verify-user-by-id?encryptedId=asdasdasdadsasdadasdadsasdasd
  */
-router.get("/verify-user-by-id/:encryptedId", async (req: Request, res: Response) => {
+router.get("/verify-user-by-id", async (req: Request, res: Response) => {   
     try {
-        const encryptedId = req.params.encryptedId as string;
+
+        // this is assuming we receive the 'encryptedId' extracted from the url by applying decryptPayload() function
+
+        const encryptedId = req.query.encryptedId as string;
+        console.log("this is the encrypted ID: ", encryptedId);
         if (!encryptedId) {
             console.error("❌ No encryptedId passed");
             return;
         }
         const userId = decrypt(encryptedId);
+        console.log("this is the decrypted ID: ", userId);
+
         if (!userId) throw new Error("Invalid verification ID");
 
         const user = await getUserById(userId);
+        console.log("this is the user: ", user);
+        
 
         if (!user) {
             return res.status(404).json({ error: "User not found" });

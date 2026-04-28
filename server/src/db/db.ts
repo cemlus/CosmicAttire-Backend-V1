@@ -161,6 +161,7 @@ export async function updateTokenAmount(username: string, token: string, newToke
 /**
  * Fetch verification credential by MAC address.
  * Returns: { lat, lng, radius_m, label } or null
+ * It means that only a set number of NFC rings are being allowed by the ESP.
  */
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase

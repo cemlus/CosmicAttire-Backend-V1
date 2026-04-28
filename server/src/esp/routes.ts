@@ -9,8 +9,8 @@ interface ESPPayload {
   mac: string;
   nfc_id: string;
   timestamp: number;
-  parsedLat: number;
-  parsedLng: number;
+  lat: number;
+  lng: number;
 }
 
 /**
@@ -19,6 +19,8 @@ interface ESPPayload {
  */
 espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
   const { data: encryptedPayload } = req.body;
+  
+  // console.log("this is the encrypted payload: ", encryptedPayload);
 
   if (!encryptedPayload) {
     return res.status(400).json({ error: "Missing encrypted payload" });
@@ -30,7 +32,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const payload: ESPPayload = JSON.parse(decrypted as string);
     console.log("🔓 Decrypted ESP payload:", payload);
 
-    const { nfc_id, mac, timestamp, parsedLat, parsedLng } = payload;
+    const { nfc_id, mac, timestamp, lat, lng } = payload;
 
     // 2. Validate timestamp (2 minute window / 120 seconds)
     const now = Math.floor(Date.now() / 1000);
@@ -52,7 +54,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     }
 
     // 4. Geofence Validation
-    const dist = getDistanceKM(parsedLat, parsedLng, credential.lat, credential.lng);
+    const dist = getDistanceKM(lat, lng, credential.lat, credential.lng);
     const radiusKM = credential.radius_m / 1000;
 
     if (dist > radiusKM) {

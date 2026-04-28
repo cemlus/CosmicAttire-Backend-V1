@@ -1,15 +1,96 @@
 -- Seed data for testing the ESP verification flow
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 1. Insert a test user into auth.users (if using local Supabase)
--- Note: In a real Supabase environment, you'd do this via the dashboard or Auth API.
--- This is a placeholder for local development.
+-- Allows the seed to update protected backend-managed columns in local/test DBs.
+SELECT set_config('request.jwt.claim.role', 'service_role', false);
+
+-- 1. Insert test users into auth.users.
+-- This is intended for a local/test Supabase project, not production.
+INSERT INTO auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+VALUES
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '00000000-0000-0000-0000-000000000001',
+    'authenticated',
+    'authenticated',
+    'auth@example.com',
+    crypt('password123', gen_salt('bf')),
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{"full_name":"Authorized User","role":"customer"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '00000000-0000-0000-0000-000000000002',
+    'authenticated',
+    'authenticated',
+    'unauth@example.com',
+    crypt('password123', gen_salt('bf')),
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{"full_name":"Unauthorized User","role":"customer"}'::jsonb,
+    now(),
+    now()
+  )
+ON CONFLICT (id) DO UPDATE SET
+  email = EXCLUDED.email,
+  raw_user_meta_data = EXCLUDED.raw_user_meta_data,
+  updated_at = now();
 
 -- 2. Insert test user profiles
-INSERT INTO public.user_profiles (user_id, username, email, full_name, role, public_profile_url, permission)
+INSERT INTO public.user_profiles (
+  user_id,
+  username,
+  email,
+  full_name,
+  role,
+  public_profile_url,
+  public_data,
+  permission
+)
 VALUES 
-  ('00000000-0000-0000-0000-000000000001', 'test_user_authorized', 'auth@example.com', 'Authorized User', 'customer', 'profile-auth', 'yes'),
-  ('00000000-0000-0000-0000-000000000002', 'test_user_unauthorized', 'unauth@example.com', 'Unauthorized User', 'customer', 'profile-unauth', 'no')
-ON CONFLICT (user_id) DO UPDATE SET permission = EXCLUDED.permission;
+  (
+    '00000000-0000-0000-0000-000000000001',
+    'test_user_authorized',
+    'auth@example.com',
+    'Authorized User',
+    'customer',
+    'profile-auth',
+    '{"name":"Authorized User"}'::jsonb,
+    'yes'
+  ),
+  (
+    '00000000-0000-0000-0000-000000000002',
+    'test_user_unauthorized',
+    'unauth@example.com',
+    'Unauthorized User',
+    'customer',
+    'profile-unauth',
+    '{"name":"Unauthorized User"}'::jsonb,
+    'no'
+  )
+ON CONFLICT (user_id) DO UPDATE SET
+  username = EXCLUDED.username,
+  email = EXCLUDED.email,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  public_profile_url = EXCLUDED.public_profile_url,
+  public_data = EXCLUDED.public_data,
+  permission = EXCLUDED.permission;
 
 -- 3. Insert hardware credentials
 INSERT INTO public.verification_credentials (mac_address, lat, lng, radius_m, label, nfc_id)

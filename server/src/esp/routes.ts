@@ -95,14 +95,30 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
  * { ring_id, mac_address, shopkeeper_id, amount, timestamp, lat, lng }
  */
 espRouter.post("/verify", async (req: Request, res: Response) => {
-  try {
-    const { data: encryptedPayload } = req.body;
+  const { data: encryptedPayload } = req.body;
+  const isEncryptedRequest = typeof encryptedPayload === "string" && encryptedPayload.length > 0;
 
-    if (!encryptedPayload) {
-      return res.status(400).json({ error: "Missing encrypted payload" });
+  const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
+    if (isEncryptedRequest) {
+      const text = typeof body === "string" ? body : JSON.stringify(body);
+      return res.status(statusCode).json({ data: encryptPayload(text) });
     }
 
-    const decryptedPayload = decryptPayload(encryptedPayload);
+    if (typeof body === "string") {
+      const isError = statusCode >= 400 || body.startsWith("ERROR:");
+      return res.status(statusCode).json({
+        status: isError ? "ERROR" : "SUCCESS",
+        message: body.replace(/^ERROR:\s*/, ""),
+      });
+    }
+
+    return res.status(statusCode).json(body);
+  };
+
+  try {
+    const decryptedPayload = isEncryptedRequest
+      ? decryptPayload(encryptedPayload)
+      : JSON.stringify(req.body);
     const {
       nfc_id,
       mac_address,
@@ -123,7 +139,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       lng == null
     ) {
       console.error("❌ All credentials are not passed");
-      return res.status(400).json({ error: "Verification failed" });
+      return sendPaymentResponse(400, "ERROR: Verification failed");
     }
 
   // checking timestamp and amount validity
@@ -132,15 +148,11 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 
   
     if (!Number.isFinite(amountNum) || amountNum <= 0 || !Number.isInteger(amountNum)) {
-      return res.status(400).json({
-        data: encryptPayload("ERROR: Invalid token amount"),
-      });
+      return sendPaymentResponse(400, "ERROR: Invalid token amount");
     }
 
     if (!Number.isFinite(tsNum)) {
-      return res.status(400).json({
-        data: encryptPayload("ERROR: Invalid timestamp"),
-      });
+      return sendPaymentResponse(400, "ERROR: Invalid timestamp");
     }
 
     // Accept either seconds or milliseconds
@@ -149,43 +161,33 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     const timeDiff = Math.abs(nowMs - payloadMs);
 
     if (timeDiff > 120000) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Clock drift too high or Replay detected"),
-      });
+      return sendPaymentResponse(403, "ERROR: Clock drift too high or Replay detected");
     }
 
     // Check 2 -> Verify device
     const paymentDevice = await getPaymentMachine(mac_address);
 
     if (!paymentDevice || paymentDevice.mac_address !== mac_address) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Payment device doesn't exist"),
-      });
+      return sendPaymentResponse(403, "ERROR: Payment device doesn't exist");
     }
 
     // Check 3 -> Verify shopkeeper matches the device
     if (String(paymentDevice.shopkeeper_id) !== String(shopkeeper_id)) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Shopkeeper does not match device"),
-      });
+      return sendPaymentResponse(403, "ERROR: Shopkeeper does not match device");
     }
 
     // Check 4 -> Ring validation
     const ring = await getRingFromRingId(nfc_id);
 
     if (!ring || ring.ring_id !== nfc_id) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Invalid Ring"),
-      });
+      return sendPaymentResponse(403, "ERROR: Invalid Ring");
     }
 
     const customerId = ring.user_id;
 
     const user = await getUserIdByNFCId(nfc_id);
     if (!user || String(user.user_id) !== String(customerId)) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Ring doesn't belong to user"),
-      });
+      return sendPaymentResponse(403, "ERROR: Ring doesn't belong to user");
     }
 
     // Check 5 -> Wallet validation
@@ -193,21 +195,15 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     const shopkeeperWallet = await getWalletByUserId(shopkeeper_id);
 
     if (!customerWallet) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Customer wallet not found"),
-      });
+      return sendPaymentResponse(403, "ERROR: Customer wallet not found");
     }
 
     if (!shopkeeperWallet) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Shopkeeper wallet not found"),
-      });
+      return sendPaymentResponse(403, "ERROR: Shopkeeper wallet not found");
     }
 
     if (amountNum > Number(customerWallet.balance)) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Insufficient balance in wallet"),
-      });
+      return sendPaymentResponse(403, "ERROR: Insufficient balance in wallet");
     }
 
     // Transaction logic
@@ -226,9 +222,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 
     if (debitError) {
       console.error("❌ Debit failed:", debitError.message);
-      return res.status(500).json({
-        data: encryptPayload("ERROR: Failed to debit customer wallet"),
-      });
+      return sendPaymentResponse(500, "ERROR: Failed to debit customer wallet");
     }
 
     // Update shopkeeper wallet
@@ -252,9 +246,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
         })
         .eq("user_id", customerId);
 
-      return res.status(500).json({
-        data: encryptPayload("ERROR: Failed to credit shopkeeper wallet"),
-      });
+      return sendPaymentResponse(500, "ERROR: Failed to credit shopkeeper wallet");
     }
 
     // Insert transaction record
@@ -262,7 +254,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       .from("transactions")
       .insert({
         user_id: customerId,
-        ring_id: nfc_id,
+        ring_id: ring.id,
         amount: amountNum,
         type: "payment",
         description: "Ring payment",
@@ -294,28 +286,30 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
         })
         .eq("user_id", shopkeeper_id);
 
-      return res.status(500).json({
-        data: encryptPayload("ERROR: Failed to save transaction"),
-      });
+      return sendPaymentResponse(500, "ERROR: Failed to save transaction");
     }
 
-    return res.status(200).json({
-      data: encryptPayload(
-        JSON.stringify({
-          status: "SUCCESS",
-          message: "Tokens transferred successfully",
-          transaction_id: txData.id,
-          customer_id: customerId,
-          shopkeeper_id,
-          amount: amountNum,
-        })
-      ),
+    return sendPaymentResponse(200, {
+      status: "SUCCESS",
+      message: "Tokens transferred successfully",
+      transaction_id: txData.id,
+      customer_id: customerId,
+      shopkeeper_id,
+      amount: amountNum,
+      balances: {
+        customer: {
+          before: Number(customerWallet.balance),
+          after: newCustomerBalance,
+        },
+        shopkeeper: {
+          before: Number(shopkeeperWallet.balance),
+          after: newShopkeeperBalance,
+        },
+      },
     });
   } catch (err) {
     console.error("❌ Payment verification flow failed:", (err as Error).message);
-    return res.status(500).json({
-      error: "Payment verification flow failed",
-    });
+    return sendPaymentResponse(500, "ERROR: Payment verification flow failed");
   }
 });
 

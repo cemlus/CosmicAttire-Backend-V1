@@ -94,36 +94,22 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
 });
 
 /**
- * ✅ Serve frontend for verification
- */
-// router.get("/verification-1/:encryptedId", (req: Request, res: Response) => {
-//     const filePath = path.join(__dirname, "../frontend/verification.html");
-//     res.sendFile(filePath);
-// });
-
-/**
  * ✅ ESP encrypted user verification
  * http://localhost:8080/api/verify-user-by-id?encryptedId=asdasdasdadsasdadasdadsasdasd
  */
-router.get("/verify-user-by-id", async (req: Request, res: Response) => {   
+const verifyUserById = async (req: Request, res: Response) => {   
     try {
-
-        // this is assuming we receive the 'encryptedId' extracted from the url by applying decryptPayload() function
-
-        const encryptedId = req.query.encryptedId as string;
-        console.log("this is the encrypted ID: ", encryptedId);
+        const encryptedId = (req.query.encryptedId || req.params.encryptedId) as string | undefined;
         if (!encryptedId) {
             console.error("❌ No encryptedId passed");
-            return;
+            return res.status(400).json({ error: "Missing encryptedId" });
         }
+
         const userId = decrypt(encryptedId);
-        console.log("this is the decrypted ID: ", userId);
 
         if (!userId) throw new Error("Invalid verification ID");
 
         const user = await getUserById(userId);
-        console.log("this is the user: ", user);
-        
 
         if (!user) {
             return res.status(404).json({ error: "User not found" });
@@ -141,6 +127,9 @@ router.get("/verify-user-by-id", async (req: Request, res: Response) => {
         console.error("❌ Verification error:", err.message);
         res.status(400).json({ error: "Invalid or expired verification ID" });
     }
-});
+};
+
+router.get("/verify-user-by-id", verifyUserById);
+router.get("/verify-user-by-id/:encryptedId", verifyUserById);
 
 export default router;

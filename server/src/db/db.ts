@@ -210,7 +210,7 @@ export async function getPaymentMachine(mac_address: string) {
 export async function getRingFromRingId(ring_id: string){
   const { data, error } = await supabase
     .from("rings")
-    .select("ring_id, status, user_id")
+    .select("id, ring_id, status, user_id")
     .eq("ring_id", ring_id)
     .single();
 

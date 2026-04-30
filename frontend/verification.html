@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Access Verification</title>
+  <link rel="stylesheet" href="/verification-style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="background"></div>
+
+  <main class="card">
+    <div id="access-badge" class="access-badge neutral">Verifying...</div>
+
+    <img id="profile-photo" class="profile hidden" src="" alt="Profile photo" />
+
+    <h2 id="display-name" class="user-name hidden">-</h2>
+
+    <section id="details" class="hidden fade">
+      <div class="detail"><span>Zone</span> <strong id="zone">-</strong></div>
+      <div class="detail"><span>Permission</span> <strong id="permission">-</strong></div>
+      <div class="detail"><span>Verified At</span> <strong id="time">-</strong></div>
+      <div class="detail user-id-row"><span>User ID</span> <strong id="user-id">-</strong></div>
+    </section>
+
+    <section class="response-panel">
+      <span>Backend response</span>
+      <pre id="backend-response">Waiting for API response...</pre>
+    </section>
+  </main>
+
+  <footer>Secure Access Terminal · CosmicAttire</footer>
+
+  <script src="/verification.js"></script>
+</body>
+</html>

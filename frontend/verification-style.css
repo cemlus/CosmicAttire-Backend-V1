@@ -1,0 +1,158 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #f7f7fb;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(60, 180, 140, 0.2), transparent 28%),
+    radial-gradient(circle at 80% 0%, rgba(92, 122, 255, 0.18), transparent 30%),
+    #101115;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px 56px;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 34px 34px;
+  pointer-events: none;
+}
+
+.card {
+  width: min(100%, 460px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(18, 20, 26, 0.92);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  padding: 24px;
+  position: relative;
+}
+
+.access-badge {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+
+.access-badge.neutral {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d7d9e2;
+}
+
+.access-badge.granted {
+  background: rgba(45, 180, 115, 0.16);
+  color: #80f0b3;
+  border: 1px solid rgba(128, 240, 179, 0.38);
+}
+
+.access-badge.denied {
+  background: rgba(235, 85, 85, 0.16);
+  color: #ff9a9a;
+  border: 1px solid rgba(255, 154, 154, 0.35);
+}
+
+.profile {
+  display: block;
+  width: 116px;
+  height: 116px;
+  margin: 24px auto 12px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.24);
+}
+
+.user-name {
+  margin: 14px 0 20px;
+  font-size: 1.55rem;
+  text-align: center;
+}
+
+.detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b7bccb;
+}
+
+.detail strong {
+  color: #ffffff;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.user-id-row {
+  align-items: flex-start;
+}
+
+.response-panel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.response-panel span {
+  display: block;
+  margin-bottom: 8px;
+  color: #b7bccb;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 6px;
+  background: #08090c;
+  color: #dfe5f4;
+  padding: 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.hidden {
+  display: none;
+}
+
+footer {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 18px;
+  color: rgba(255, 255, 255, 0.58);
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 420px) {
+  .card {
+    padding: 18px;
+  }
+
+  .detail {
+    display: block;
+  }
+
+  .detail strong {
+    display: block;
+    margin-top: 5px;
+    text-align: left;
+  }
+}

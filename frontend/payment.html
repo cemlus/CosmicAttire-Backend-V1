@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP Payment Demo</title>
+  <link rel="stylesheet" href="/payment.css" />
+  <script src="/payment.js" defer></script>
+</head>
+<body>
+  <main class="workspace">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Official route</p>
+        <h1>ESP Payment Transaction</h1>
+      </div>
+      <div id="route-status" class="status-pill idle">Ready</div>
+    </header>
+
+    <section class="flow-panel">
+      <article id="customer-wallet" class="wallet customer">
+        <span>Customer</span>
+        <strong>Demo Customer</strong>
+        <code>36c973ef-a786-46ed-8be0-ecc4dc63ccc8</code>
+        <div id="customer-balance" class="balance">Current balance: 500 INR</div>
+      </article>
+
+      <div class="transfer-rail">
+        <div id="transfer-dot" class="transfer-dot"></div>
+        <span id="transfer-label">25 INR</span>
+      </div>
+
+      <article id="shopkeeper-wallet" class="wallet shopkeeper">
+        <span>Shopkeeper</span>
+        <strong>Demo Shopkeeper</strong>
+        <code>b11886bb-3f43-4139-8e5a-4bbb15f44912</code>
+        <div id="shopkeeper-balance" class="balance">Current balance: 100 INR</div>
+      </article>
+    </section>
+
+    <section class="grid">
+      <form id="payment-form" class="panel">
+        <div class="panel-heading">
+          <h2>Payment Payload</h2>
+          <span id="payload-size">0 bytes</span>
+        </div>
+
+        <label>
+          NFC ID
+          <input id="nfc-id" name="nfc_id" value="NFC_PAY_123" autocomplete="off" />
+        </label>
+
+        <label>
+          Device MAC
+          <input id="mac-address" name="mac_address" value="PAY:AA:BB:CC:DD:EE" autocomplete="off" />
+        </label>
+
+        <label>
+          Shopkeeper ID
+          <input id="shopkeeper-id" name="shopkeeper_id" value="b11886bb-3f43-4139-8e5a-4bbb15f44912" autocomplete="off" />
+        </label>
+
+        <div class="two-col">
+          <label>
+            Amount
+            <input id="amount" name="amount" type="number" min="1" step="1" value="25" />
+          </label>
+          <label>
+            Timestamp
+            <input id="timestamp" name="timestamp" inputmode="numeric" />
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Latitude
+            <input id="lat" name="lat" type="number" step="0.0001" value="40.7128" />
+          </label>
+          <label>
+            Longitude
+            <input id="lng" name="lng" type="number" step="0.0001" value="-74.006" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="fresh-timestamp">Refresh Time</button>
+          <button type="submit" id="pay-button">Pay Through /api/esp/verify</button>
+        </div>
+      </form>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Route Response</h2>
+          <span>Readable JSON</span>
+        </div>
+        <dl class="response-meta">
+          <div><dt>HTTP</dt><dd id="http-status">-</dd></div>
+          <div><dt>Route</dt><dd>/api/esp/verify</dd></div>
+          <div><dt>Method</dt><dd>POST</dd></div>
+        </dl>
+        <pre id="response-body">No payment submitted yet.</pre>
+      </section>
+    </section>
+
+    <section class="grid lower">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Backend Stages</h2>
+          <span id="stage-count">0</span>
+        </div>
+        <ol id="event-log" class="event-log"></ol>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Expected Table Changes</h2>
+          <span>Verify in Supabase</span>
+        </div>
+        <div class="table-preview">
+          <div>
+            <span>wallets</span>
+            <strong>customer - amount</strong>
+            <strong>shopkeeper + amount</strong>
+          </div>
+          <div>
+            <span>transactions</span>
+            <strong>new payment row</strong>
+            <strong>ring_id = rings.id</strong>
+          </div>
+        </div>
+        <pre class="sql-box">select up.full_name, up.role, w.balance, w.currency
+from public.wallets w
+join public.user_profiles up on up.user_id = w.user_id
+where w.user_id in (
+  '36c973ef-a786-46ed-8be0-ecc4dc63ccc8',
+  'b11886bb-3f43-4139-8e5a-4bbb15f44912'
+)
+order by up.role;</pre>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

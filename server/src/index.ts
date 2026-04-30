@@ -1,11 +1,33 @@
 import express from "express";
+import fs from "fs";
+import path from "path";
 import routes from "./routes.js";
 import espRouter from "./esp/routes.js";
 import { env } from "./config.js";
 
 export const app = express();
 
+const frontendDir = [
+  path.resolve(process.cwd(), "../frontend"),
+  path.resolve(process.cwd(), "frontend"),
+].find((dir) => fs.existsSync(dir));
+
 app.use(express.json());
+
+if (frontendDir) {
+  app.use(express.static(frontendDir));
+
+  app.get("/profile/:encryptedId", (_req, res) => {
+    res.sendFile(path.join(frontendDir, "index.html"));
+  });
+
+  app.get("/verification-1/:encryptedId", (_req, res) => {
+    res.sendFile(path.join(frontendDir, "verification.html"));
+  });
+
+} else {
+  console.warn("⚠️ Frontend directory not found; browser prototype routes are disabled.");
+}
 
 app.use("/api", routes);
 app.use("/api/esp", espRouter);
@@ -16,4 +38,3 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
   });
 }
-

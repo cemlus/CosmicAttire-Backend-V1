@@ -88,3 +88,21 @@ create table if not exists public.verification_credentials (
   nfc_id text,
   created_at timestamptz not null default timezone('utc', now())
 );
+
+create table public.ring_device_access (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null references public.user_profiles(user_id) on delete cascade,
+  ring_id text not null,
+
+  mac_address text not null,
+  shopkeeper_id uuid not null references auth.users(id) on delete cascade,
+
+  status text not null default 'active'
+    check (status in ('active', 'inactive', 'revoked')),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint ring_device_access_unique unique (ring_id, mac_address, shopkeeper_id)
+);

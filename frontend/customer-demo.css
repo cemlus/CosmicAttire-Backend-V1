@@ -1,0 +1,394 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172026;
+  background: #f4f7f6;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: #0b6b57;
+  color: #ffffff;
+  padding: 12px 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.app-shell {
+  width: min(1160px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 34px 0 44px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.login-screen {
+  min-height: calc(100vh - 78px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 420px);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.brand-panel,
+.login-card,
+.pay-panel,
+.shopkeeper-card,
+.activity-panel,
+.balance-card {
+  border: 1px solid rgba(23, 32, 38, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(23, 32, 38, 0.08);
+}
+
+.brand-panel {
+  padding: clamp(34px, 6vw, 70px);
+  display: grid;
+  align-content: center;
+  background:
+    linear-gradient(135deg, rgba(11, 107, 87, 0.92), rgba(9, 35, 45, 0.88)),
+    url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 60h120M60 0v120' stroke='rgba(255,255,255,.16)' stroke-width='1'/%3E%3C/svg%3E");
+  color: #ffffff;
+}
+
+.brand-panel h1 {
+  width: min(720px, 100%);
+  margin: 0;
+  font-size: clamp(2.3rem, 6vw, 5rem);
+  line-height: 0.98;
+}
+
+.supporting {
+  width: min(560px, 100%);
+  margin: 20px 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: #0b6b57;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brand-panel .eyebrow {
+  color: #a7f3d0;
+}
+
+.login-card {
+  padding: 28px;
+  align-self: center;
+  display: grid;
+  gap: 16px;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h2 {
+  margin-bottom: 4px;
+  font-size: 1.15rem;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #5c6971;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+input {
+  width: 100%;
+  border: 1px solid rgba(23, 32, 38, 0.14);
+  border-radius: 8px;
+  background: #fbfcfc;
+  color: #172026;
+  padding: 12px 13px;
+}
+
+input:focus {
+  outline: 3px solid rgba(11, 107, 87, 0.16);
+  border-color: #0b6b57;
+}
+
+.form-message {
+  min-height: 22px;
+  margin: 0;
+  color: #5c6971;
+  line-height: 1.45;
+}
+
+.form-message.error {
+  color: #b42318;
+}
+
+.form-message.success {
+  color: #0b6b57;
+}
+
+.payment-screen {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+}
+
+.balance-card {
+  min-width: 210px;
+  padding: 18px;
+  text-align: right;
+}
+
+.balance-card span,
+.section-heading span,
+.panel-heading span,
+.shopkeeper-card span,
+.activity-list span {
+  color: #66737b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.balance-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 2.15rem;
+  color: #0b6b57;
+}
+
+.payment-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pay-panel {
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 18px;
+}
+
+.panel-heading,
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.shopkeeper-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.shopkeeper-card {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  cursor: pointer;
+  border-color: transparent;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.shopkeeper-card:hover,
+.shopkeeper-card.selected {
+  transform: translateY(-2px);
+  border-color: rgba(11, 107, 87, 0.34);
+  box-shadow: 0 18px 50px rgba(77, 147, 232, 0.611);
+}
+
+.shopkeeper-card h3 {
+  margin: 0;
+  font-size: 1.22rem;
+}
+
+.shopkeeper-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.shopkeeper-meta span {
+  border-radius: 999px;
+  background: #eef4f1;
+  color: #386054;
+  padding: 7px 10px;
+  text-transform: none;
+}
+
+.shopkeeper-balance {
+  width: fit-content;
+  border-radius: 8px;
+  background: rgba(11, 107, 87, 0.1);
+  color: #0b6b57;
+  padding: 9px 11px;
+  font-weight: 900;
+}
+
+.shopkeeper-card.updated,
+.balance-card.updated {
+  animation: balance-flash 850ms ease;
+}
+
+.transfer-visual {
+  min-height: 82px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #eef4f1;
+  overflow: hidden;
+}
+
+.transfer-visual::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  height: 3px;
+  background: linear-gradient(90deg, #0b6b57, #8fbfae);
+  border-radius: 999px;
+}
+
+.transfer-dot {
+  position: absolute;
+  left: 18px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0b6b57;
+  box-shadow: 0 0 20px rgba(11, 107, 87, 0.4);
+}
+
+.transfer-dot.active {
+  animation: transfer 900ms ease-in-out both;
+}
+
+#transfer-copy {
+  z-index: 1;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 7px 12px;
+  color: #386054;
+  font-weight: 900;
+}
+
+.activity-panel {
+  padding: 20px;
+}
+
+.activity-list {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.activity-list li {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f6f8f7;
+  line-height: 1.5;
+}
+
+.activity-list li.success {
+  color: #0b6b57;
+}
+
+.activity-list li.error {
+  color: #b42318;
+}
+
+@keyframes transfer {
+  from {
+    left: 18px;
+  }
+  to {
+    left: calc(100% - 34px);
+  }
+}
+
+@keyframes balance-flash {
+  0% {
+    box-shadow: 0 0 0 rgba(11, 107, 87, 0);
+    transform: translateY(0);
+  }
+
+  38% {
+    box-shadow: 0 18px 48px rgba(11, 107, 87, 0.22);
+    transform: translateY(-2px);
+  }
+
+  100% {
+    box-shadow: 0 18px 50px rgba(23, 32, 38, 0.08);
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 860px) {
+  .login-screen,
+  .payment-layout,
+  .shopkeeper-list {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-header,
+  .panel-heading,
+  .section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .balance-card {
+    width: 100%;
+    text-align: left;
+  }
+
+  .pay-panel {
+    position: static;
+  }
+}

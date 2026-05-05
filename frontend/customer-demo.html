@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CosmicAttire Pay</title>
+  <link rel="stylesheet" href="/customer-demo.css" />
+  <script src="/customer-demo.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <section id="login-screen" class="login-screen">
+      <div class="brand-panel">
+        <p class="eyebrow">CosmicAttire Pay</p>
+        <h1>Pay vendors with your ring balance.</h1>
+        <p class="supporting">A customer-first demo for fast token transfers at the event counter.</p>
+      </div>
+
+      <form id="login-form" class="login-card">
+        <h2>Customer Login</h2>
+        <label>
+          Email
+          <input id="email" type="email" value="customer@example.com" autocomplete="email" />
+        </label>
+        <label>
+          Password
+          <input id="password" type="password" value="password123" autocomplete="current-password" />
+        </label>
+        <button type="submit">Enter Demo Wallet</button>
+        <p id="login-message" class="form-message"></p>
+      </form>
+    </section>
+
+    <section id="payment-screen" class="payment-screen hidden">
+      <header class="dashboard-header">
+        <div>
+          <p class="eyebrow">Welcome back</p>
+          <h1 id="customer-name">Aarav Customer</h1>
+        </div>
+        <div class="balance-card" id="customer-balance-card">
+          <span>Your tokens</span>
+          <strong id="customer-balance">750</strong>
+        </div>
+      </header>
+
+      <section class="payment-layout">
+        <aside class="pay-panel">
+          <div class="panel-heading">
+            <h2>Send Tokens</h2>
+            <span id="selected-shopkeeper-label">Select a shopkeeper</span>
+          </div>
+
+          <label>
+            Amount
+            <input id="amount" type="number" min="1" step="1" value="25" />
+          </label>
+
+          <button id="pay-button" type="button" disabled>Pay Selected Shopkeeper</button>
+          <p id="payment-message" class="form-message"></p>
+
+          <div class="transfer-visual">
+            <div id="transfer-dot" class="transfer-dot"></div>
+            <span id="transfer-copy">Ready</span>
+          </div>
+        </aside>
+
+        <section>
+          <div class="section-heading">
+            <h2>Choose Shopkeeper</h2>
+            <span>Available counters</span>
+          </div>
+          <div id="shopkeeper-list" class="shopkeeper-list"></div>
+        </section>
+      </section>
+
+      <section class="activity-panel">
+        <div class="section-heading">
+          <h2>Recent Activity</h2>
+          <span id="activity-count">0 payments</span>
+        </div>
+        <ol id="activity-list" class="activity-list"></ol>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

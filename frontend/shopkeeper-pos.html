@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CosmicAttire POS</title>
+  <link rel="stylesheet" href="/shopkeeper-pos.css" />
+  <script src="/shopkeeper-pos.js" defer></script>
+</head>
+<body>
+  <main class="pos-shell">
+    <header class="pos-header">
+      <div>
+        <p class="eyebrow">CosmicAttire POS</p>
+        <h1>Create a ring payment request.</h1>
+      </div>
+      <div id="pos-status" class="status-pill idle">Ready</div>
+    </header>
+
+    <section class="pos-grid">
+      <section class="panel request-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Shopkeeper</p>
+            <h2>Payment Setup</h2>
+          </div>
+          <span id="counter-label">No counter selected</span>
+        </div>
+
+        <label>
+          Counter
+          <select id="counter-select">
+            <option value="">Choose counter</option>
+          </select>
+        </label>
+
+        <label>
+          Token Amount
+          <input id="amount-input" type="number" min="1" step="1" value="25" />
+        </label>
+
+        <button id="generate-button" type="button">Generate Payment Request</button>
+        <p id="setup-message" class="message"></p>
+      </section>
+
+      <section class="panel ready-panel" id="ready-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Customer View</p>
+            <h2>Waiting for Ring Tap</h2>
+          </div>
+          <span id="request-state">No active request</span>
+        </div>
+
+        <div class="request-card">
+          <span id="merchant-name">Select a counter</span>
+          <strong id="request-amount">0 tokens</strong>
+          <p id="request-copy">Generate a request to show the amount to the customer.</p>
+        </div>
+
+        <button id="simulate-button" type="button" disabled>Simulate Ring Tap</button>
+        <p id="payment-message" class="message"></p>
+      </section>
+    </section>
+
+    <section class="balance-grid">
+      <article class="balance-card" id="customer-card">
+        <span>Demo customer</span>
+        <strong id="customer-balance">750</strong>
+        <p>Available tokens</p>
+      </article>
+
+      <article class="balance-card" id="shopkeeper-card">
+        <span id="shopkeeper-card-label">Selected shopkeeper</span>
+        <strong id="shopkeeper-balance">-</strong>
+        <p>Counter wallet</p>
+      </article>
+    </section>
+
+    <section class="activity-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Live Demo</p>
+          <h2>Payment Activity</h2>
+        </div>
+        <span id="activity-count">0 events</span>
+      </div>
+      <ol id="activity-list" class="activity-list"></ol>
+    </section>
+  </main>
+</body>
+</html>

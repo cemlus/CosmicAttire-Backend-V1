@@ -13,7 +13,7 @@ window.onload = async () => {
 
   if (!encryptedId) {
     setBadge("Missing verification link", "denied");
-    setResponse("The URL mu`st be /verification-1/:encryptedId.");
+    setResponse("The URL must be /verification-1/:encryptedId.");
     return;
   }
 
@@ -86,5 +86,5 @@ function setBadge(text, type) {
 
 function setResponse(text) {
   const responseEl = document.getElementById("backend-response");
-  if (responseEl) responseEl.textContent = text;
+  if (responseEl) responseEl.textContent = null;
 }

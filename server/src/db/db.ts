@@ -236,3 +236,24 @@ export async function getWalletByUserId(user_id: string){
 
   return data;
 }
+
+export async function getRingDeviceAccess(
+  ringId: string,
+  macAddress: string,
+  shopkeeperId: string
+) {
+  const { data, error } = await supabase
+    .from("ring_device_access")
+    .select("*")
+    .eq("ring_id", ringId)
+    .eq("mac_address", macAddress)
+    .eq("shopkeeper_id", shopkeeperId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch ring device access: ${error.message}`);
+  }
+
+  return data;
+}

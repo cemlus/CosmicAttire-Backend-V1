@@ -170,3 +170,30 @@ on conflict (mac_address) do update set
   location = excluded.location,
   shopkeeper_id = excluded.shopkeeper_id,
   updated_at = now();
+
+insert into public.ring_device_access (
+  user_id,
+  ring_id,
+  mac_address,
+  shopkeeper_id,
+  status
+)
+values
+(
+  '36c973ef-a786-46ed-8be0-ecc4dc63ccc8',
+  'NFC_CUSTOMER_DEMO',
+  'PAY:LUNA:COFFEE:01',
+  'b11886bb-3f43-4139-8e5a-4bbb15f44912',
+  'active'
+),
+(
+  '36c973ef-a786-46ed-8be0-ecc4dc63ccc8',
+  'NFC_CUSTOMER_DEMO',
+  'PAY:NOVA:MERCH:01',
+  '4f35bc3f-163d-4498-9885-cb44f8dd3b20',
+  'active'
+)
+on conflict (ring_id, mac_address, shopkeeper_id) do update set
+  user_id = excluded.user_id,
+  status = excluded.status,
+  updated_at = now();

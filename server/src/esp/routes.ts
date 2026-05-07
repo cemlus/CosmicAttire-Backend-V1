@@ -1,6 +1,6 @@
 import express, { type Request, type Response, Router } from "express";
 import { decryptPayload, encryptPayload } from "./crypto.js";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId, getRingDeviceAccess } from "../db/db.js";
 import { encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
@@ -19,30 +19,30 @@ interface ESPPayload {
  * Payload is sent in the Request Body as { "data": "BASE64_ENCRYPTED_STRING" }
  */
 espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
-  const { data: encryptedPayload } = req.body;
+  // const { data: encryptedPayload } = req.body;
 
   // console.log("this is the encrypted payload: ", encryptedPayload);
 
-  if (!encryptedPayload) {
-    return res.status(400).json({ error: "Missing encrypted payload" });
-  }
+  // if (!encryptedPayload) {
+  //   return res.status(400).json({ error: "Missing encrypted payload" });
+  // }
 
   try {
     // 1. Decrypt the ESP32 payload
-    const decrypted = decryptPayload(encryptedPayload);
-    const payload: ESPPayload = JSON.parse(decrypted as string);
-    console.log("🔓 Decrypted ESP payload:", payload);
+    // const decrypted = decryptPayload(encryptedPayload);
+    // const payload: ESPPayload = JSON.parse(decrypted as string);
+    // console.log("🔓 Decrypted ESP payload:", encryptedPayload);
 
-    const { nfc_id, mac, timestamp, lat, lng } = payload;
+    const { nfc_id, mac, timestamp, lat, lng } = req.body;
 
     // 2. Validate timestamp (2 minute window / 120 seconds)
     const now = Math.floor(Date.now() / 1000);
     const timeDiff = Math.abs(now - timestamp);
-    if (timeDiff > 120) {
-      return res.status(403).json({
-        data: encryptPayload("ERROR: Clock drift too high or Replay detected")
-      });
-    }
+    // if (timeDiff > 12000) {
+    //   return res.status(403).json({
+    //     data: ("ERROR: Clock drift too high or Replay detected")
+    //   });
+    // }
 
     // 3. Lookup Hardware Credential and User in Supabase
     const [credential, userId] = await Promise.all([
@@ -51,7 +51,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     ])
 
     if (!credential) {
-      return res.json({ data: encryptPayload("ACCESS DENIED: Unrecognized Hardware") });
+      return res.json({ data: ("ACCESS DENIED: Unrecognized Hardware") });
     }
 
     // 4. Geofence Validation
@@ -59,29 +59,28 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const radiusKM = credential.radius_m / 1000;
 
     if (dist > radiusKM) {
-      return res.json({ data: encryptPayload("ACCESS DENIED: Location Mismatch") });
+      return res.json({ data: ("ACCESS DENIED: Location Mismatch") });
     }
 
     // 5. NFC Hardware ID Validation
     if (credential.nfc_id && credential.nfc_id !== nfc_id) {
-      return res.json({ data: encryptPayload("ACCESS DENIED: Hardware Tampered") });
+      return res.json({ data: ("ACCESS DENIED: Hardware Tampered") });
     }
 
     // 6. Check user permission (Must be "yes")
     const user = await getUserById(userId?.user_id as string);
 
     if (!user || user.permission?.toLowerCase() !== "yes") {
-      return res.json({ data: encryptPayload("ACCESS DENIED: User Unauthorized") });
+      return res.json({ data: ("ACCESS DENIED: User Unauthorized") });
     }
 
     // 7. Success - Generate the one-time verification link
-
     const encryptedId = encrypt(userId?.user_id as string);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
 
     return res.json({
-      data: encryptPayload(`SUCCESS:${verificationLink}`)
+      data: (`SUCCESS:${verificationLink}`)
     });
 
   } catch (err) {
@@ -142,11 +141,11 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       return sendPaymentResponse(400, "ERROR: Verification failed");
     }
 
-  // checking timestamp and amount validity
+    // checking timestamp and amount validity
     const amountNum = Number(amount);
     const tsNum = Number(timestamp);
 
-  
+
     if (!Number.isFinite(amountNum) || amountNum <= 0 || !Number.isInteger(amountNum)) {
       return sendPaymentResponse(400, "ERROR: Invalid token amount");
     }
@@ -188,6 +187,22 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     const user = await getUserIdByNFCId(nfc_id);
     if (!user || String(user.user_id) !== String(customerId)) {
       return sendPaymentResponse(403, "ERROR: Ring doesn't belong to user");
+    }
+
+    // validate if ring is allowed for this device/shopkeeper
+
+    const access = await getRingDeviceAccess(
+      nfc_id,
+      mac_address,
+      shopkeeper_id
+    );
+
+    if (!access) {
+      return sendPaymentResponse(403, "ERROR: Ring is not allowed for this payment device");
+    }
+
+    if (String(access.user_id) !== String(ring.user_id)) {
+      return sendPaymentResponse(403, "ERROR: Ring access record does not match user");
     }
 
     // Check 5 -> Wallet validation

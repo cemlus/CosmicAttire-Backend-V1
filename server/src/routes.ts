@@ -5,6 +5,7 @@ import {
     getProtectedProfileData,
     updateTokenAmount,
     getUserById,
+    getWalletByUserId,
 } from "./db/db.js";
 
 import { decrypt } from "./encryptor.js";
@@ -128,6 +129,23 @@ const verifyUserById = async (req: Request, res: Response) => {
         res.status(400).json({ error: "Invalid or expired verification ID" });
     }
 };
+
+router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
+    try {
+        const userId = req.params.userId as string;
+        if (!userId) {
+            return res.status(400).json({ error: "User ID is required" });
+        }
+        const wallet = await getWalletByUserId(userId);
+        if (!wallet) {
+            return res.status(404).json({ error: "Wallet not found" });
+        }
+        res.status(200).json({ balance: wallet.balance });
+    } catch (err: any) {
+        console.error("❌ Error fetching wallet:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
 
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);

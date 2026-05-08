@@ -1,4 +1,5 @@
 const DEMO_CUSTOMER = {
+  userId: "36c973ef-a786-46ed-8be0-ecc4dc63ccc8",
   ringId: "NFC_CUSTOMER_DEMO",
   balance: 750,
 };
@@ -48,9 +49,9 @@ let selectedCounterKey = "";
 let customerTokens = DEMO_CUSTOMER.balance;
 let eventTotal = 0;
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   renderCounters();
-  renderBalances();
+  await renderBalances();
   counterSelect.addEventListener("change", handleCounterChange);
   generateButton.addEventListener("click", generateRequest);
   simulateButton.addEventListener("click", simulateRingTap);
@@ -67,7 +68,7 @@ function renderCounters() {
   });
 }
 
-function handleCounterChange() {
+async function handleCounterChange() {
   selectedCounterKey = counterSelect.value;
   const counter = getSelectedCounter();
 
@@ -82,7 +83,7 @@ function handleCounterChange() {
 
   counterLabel.textContent = counter.location;
   shopkeeperCardLabel.textContent = counter.name;
-  renderBalances();
+  await renderBalances();
 }
 
 function generateRequest() {
@@ -160,7 +161,7 @@ async function simulateRingTap() {
       return;
     }
 
-    applySuccessfulPayment(counter, result);
+    await applySuccessfulPayment(counter, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network error";
     setStatus("error", "Failed");
@@ -171,7 +172,7 @@ async function simulateRingTap() {
   }
 }
 
-function applySuccessfulPayment(counter, result) {
+async function applySuccessfulPayment(counter, result) {
   const customerAfter = Number(result?.balances?.customer?.after);
   const shopkeeperAfter = Number(result?.balances?.shopkeeper?.after);
   const amount = Number(result?.amount);
@@ -187,7 +188,7 @@ function applySuccessfulPayment(counter, result) {
 
   customerTokens = customerAfter;
   counter.balance = shopkeeperAfter;
-  renderBalances();
+  await renderBalances();
   flashElement(customerCard);
   flashElement(shopkeeperCard);
   flashElement(readyPanel);
@@ -212,10 +213,35 @@ function clearRequest() {
   showMessage(paymentMessage, "", "");
 }
 
-function renderBalances() {
+async function fetchBalance(userId) {
+  try {
+    const response = await fetch(`/api/wallet/balance/${userId}`);
+    if (!response.ok) throw new Error("Failed to fetch balance");
+    const data = await response.json();
+    return data.balance;
+  } catch (error) {
+    console.error("Balance fetch error:", error);
+    return null;
+  }
+}
+
+async function renderBalances() {
+  const customerLiveBalance = await fetchBalance(DEMO_CUSTOMER.userId);
+  if (customerLiveBalance !== null) {
+    customerTokens = customerLiveBalance;
+  }
   customerBalance.textContent = formatTokens(customerTokens);
+
   const counter = getSelectedCounter();
-  shopkeeperBalance.textContent = counter ? formatTokens(counter.balance) : "-";
+  if (counter) {
+    const shopkeeperLiveBalance = await fetchBalance(counter.shopkeeperId);
+    if (shopkeeperLiveBalance !== null) {
+      counter.balance = shopkeeperLiveBalance;
+    }
+    shopkeeperBalance.textContent = formatTokens(counter.balance);
+  } else {
+    shopkeeperBalance.textContent = "-";
+  }
 }
 
 function getSelectedCounter() {

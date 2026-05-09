@@ -14,6 +14,7 @@ const frontendDir = [
 ].find((dir) => fs.existsSync(dir));
 
 app.use(express.json());
+app.use(express.text({ type: "*/*" }));
 
 if (frontendDir) {
   app.use(express.static(frontendDir));

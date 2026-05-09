@@ -7,12 +7,61 @@ import { supabase } from "../db/supaBaseClient.js";
 const espRouter: Router = express.Router();
 
 interface ESPPayload {
+  user_id: string,
+  esp_id: string,
+  reader_id: string,
   mac: string;
   nfc_id: string;
   timestamp: number;
   lat: number;
   lng: number;
 }
+
+
+espRouter.post("/test", async (req: Request, res: Response) => {
+  try {
+    // Accept either:
+    // 1) { data: "encrypted..." }
+    // 2) { encryptedPayload: "encrypted..." }
+    // 3) raw encrypted string body
+    const encryptedPayload =
+      typeof req.body === "string"
+        ? req.body
+        : req.body?.data ?? req.body?.encryptedPayload ?? req.body?.payload;
+
+    if (!encryptedPayload || typeof encryptedPayload !== "string") {
+      return res.status(400).json({ error: "Missing encrypted payload" });
+    }
+
+    console.log("Encrypted payload:", encryptedPayload);
+
+    const decrypted = decrypt(encryptedPayload);
+    const payload: ESPPayload = JSON.parse(decrypted as string);
+
+    console.log("🔓 Decrypted ESP payload:", payload);
+
+    // Match the actual keys you said ESP sends
+    const { uid, nfcid, device_id, token } = payload as any;
+
+    if (!uid || !nfcid || !device_id || !token) {
+      return res.status(400).json({
+        error: "Invalid payload: missing required fields",
+        received: payload,
+      });
+    }
+
+    const encryptedId = encrypt(uid);
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+
+    return res.json({
+      data: `SUCCESS:${verificationLink}`,
+    });
+  } catch (err) {
+    console.error("❌ ESP /test error:", err);
+    return res.status(400).json({ error: "Security validation failed" });
+  }
+});
 
 /**
  * ✅ POST /verify-user-by-id
@@ -29,8 +78,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
 
   try {
     // 1. Decrypt the ESP32 payload
-    // const decrypted = decryptPayload(encryptedPayload);
-    const decrypted = decrypt(encryptedPayload);
+    const decrypted = decryptPayload(encryptedPayload);
     const payload: ESPPayload = JSON.parse(decrypted as string);
     console.log("🔓 Decrypted ESP payload:", payload);
 

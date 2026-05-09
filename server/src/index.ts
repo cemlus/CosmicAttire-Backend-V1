@@ -4,9 +4,10 @@ import path from "path";
 import routes from "./routes.js";
 import espRouter from "./esp/routes.js";
 import { env } from "./config.js";
+import cors from 'cors';
 
 export const app = express();
-
+app.use(cors());
 const frontendDir = [
   path.resolve(process.cwd(), "../frontend"),
   path.resolve(process.cwd(), "frontend"),

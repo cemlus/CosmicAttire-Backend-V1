@@ -1,7 +1,7 @@
 import express, { type Request, type Response, Router } from "express";
 import { decryptPayload, encryptPayload } from "./crypto.js";
 import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId, getRingDeviceAccess } from "../db/db.js";
-import { encrypt } from "../encryptor.js";
+import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
 const espRouter: Router = express.Router();
@@ -29,8 +29,9 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
 
   try {
     // 1. Decrypt the ESP32 payload
-    const decrypted = decryptPayload(encryptedPayload);
-    const payload: ESPPayload = JSON.parse(decrypted);
+    // const decrypted = decryptPayload(encryptedPayload);
+    const decrypted = decrypt(encryptedPayload);
+    const payload: ESPPayload = JSON.parse(decrypted as string);
     console.log("🔓 Decrypted ESP payload:", payload);
 
     const { nfc_id, mac, timestamp, lat, lng } = payload;

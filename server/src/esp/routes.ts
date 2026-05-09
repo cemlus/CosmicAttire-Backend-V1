@@ -19,30 +19,30 @@ interface ESPPayload {
  * Payload is sent in the Request Body as { "data": "BASE64_ENCRYPTED_STRING" }
  */
 espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
-  // const { data: encryptedPayload } = req.body;
+  const { data: encryptedPayload } = req.body;
 
   // console.log("this is the encrypted payload: ", encryptedPayload);
 
-  // if (!encryptedPayload) {
-  //   return res.status(400).json({ error: "Missing encrypted payload" });
-  // }
+  if (!encryptedPayload) {
+    return res.status(400).json({ error: "Missing encrypted payload" });
+  }
 
   try {
     // 1. Decrypt the ESP32 payload
-    // const decrypted = decryptPayload(encryptedPayload);
-    // const payload: ESPPayload = JSON.parse(decrypted as string);
-    // console.log("🔓 Decrypted ESP payload:", encryptedPayload);
+    const decrypted = decryptPayload(encryptedPayload);
+    const payload: ESPPayload = JSON.parse(decrypted);
+    console.log("🔓 Decrypted ESP payload:", payload);
 
-    const { nfc_id, mac, timestamp, lat, lng } = req.body;
+    const { nfc_id, mac, timestamp, lat, lng } = payload;
 
     // 2. Validate timestamp (2 minute window / 120 seconds)
     const now = Math.floor(Date.now() / 1000);
     const timeDiff = Math.abs(now - timestamp);
-    // if (timeDiff > 12000) {
-    //   return res.status(403).json({
-    //     data: ("ERROR: Clock drift too high or Replay detected")
-    //   });
-    // }
+    if (timeDiff > 120) {
+      return res.status(403).json({
+        data: ("ERROR: Clock drift too high or Replay detected")
+      });
+    }
 
     // 3. Lookup Hardware Credential and User in Supabase
     const [credential, userId] = await Promise.all([

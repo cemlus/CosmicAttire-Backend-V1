@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+server/node_modules/
+
+# Local build outputs
+server/dist/
+server/tsconfig.tsbuildinfo
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Git files
+.git/
+.github/
+.gitignore
+
+# Environment secrets
+.env
+.env.local
+.env.development
+.env.production
+
+# Editor settings and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

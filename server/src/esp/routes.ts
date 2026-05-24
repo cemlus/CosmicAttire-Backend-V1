@@ -63,6 +63,67 @@ espRouter.post("/test", async (req: Request, res: Response) => {
   }
 });
 
+interface ESPTestPayload {
+  uid: string;
+  nfcid: string;
+  device_id: string;
+  token: string;
+}
+
+espRouter.post("/test-2", async (req: Request, res: Response) => {
+  try {
+    const encryptedPayload =
+      typeof req.body === "string"
+        ? req.body
+        : req.body?.data ?? req.body?.encryptedPayload ?? req.body?.payload;
+
+    if (!encryptedPayload || typeof encryptedPayload !== "string") {
+      return res.status(400).json({ error: "Missing encrypted payload" });
+    }
+
+    console.log("Encrypted payload:", encryptedPayload);
+
+    // 1. Decrypt the payload
+    const decrypted = decrypt(encryptedPayload);
+    
+    if (!decrypted) {
+      return res.status(400).json({ error: "Decryption failed: Invalid or tampered payload" });
+    }
+
+    // 2. Safely parse JSON
+    let payload: ESPTestPayload;
+    try {
+      payload = JSON.parse(decrypted);
+    } catch (parseErr) {
+      return res.status(400).json({ error: "Failed to parse decrypted JSON payload" });
+    }
+
+    console.log("🔓 Decrypted ESP payload:", payload);
+
+    // 3. Destructure and validate
+    const { uid, nfcid, device_id, token } = payload;
+
+    if (!uid || !nfcid || !device_id || !token) {
+      return res.status(400).json({
+        error: "Invalid payload: missing required fields (uid, nfcid, device_id, token)",
+        received: payload,
+      });
+    }
+
+    // 4. Encrypt the UID symmetrically for the verification link
+    const encryptedId = encrypt(uid);
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+
+    return res.json({
+      data: `SUCCESS:${verificationLink}`,
+    });
+  } catch (err) {
+    console.error("❌ ESP /test-2 error:", err);
+    return res.status(500).json({ error: "Internal server error during validation" });
+  }
+});
+
 /**
  * ✅ POST /verify-user-by-id
  * Payload is sent in the Request Body as { "data": "BASE64_ENCRYPTED_STRING" }

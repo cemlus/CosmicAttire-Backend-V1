@@ -36,6 +36,9 @@ export function encrypt(text: string): string {
  */
 export function decrypt(encoded: string): string | null {
     try {
+        if (typeof encoded !== "string" || !encoded.trim()) {
+            throw new Error("decrypt() received an empty or invalid payload");
+        }
         const data = Buffer.from(encoded, 'base64url');
 
         if (data.length < 28) return null; // Minimum: 12 (IV) + 16 (Tag)

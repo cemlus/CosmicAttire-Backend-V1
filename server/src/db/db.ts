@@ -207,7 +207,7 @@ export async function getPaymentMachine(mac_address: string) {
   return data;
 }
 
-export async function getRingFromRingId(ring_id: string){
+export async function getRingFromRingId(ring_id: string) {
   const { data, error } = await supabase
     .from("rings")
     .select("id, ring_id, status, user_id")
@@ -222,7 +222,7 @@ export async function getRingFromRingId(ring_id: string){
   return data;
 }
 
-export async function getWalletByUserId(user_id: string){
+export async function getWalletByUserId(user_id: string) {
   const { data, error } = await supabase
     .from("wallets")
     .select("balance, user_id")
@@ -256,4 +256,31 @@ export async function getRingDeviceAccess(
   }
 
   return data;
+}
+
+export async function overrideUser(userId: string) {
+  const user = await getUserById(userId);
+
+  if (!user) {
+    throw new Error("User doesn't exist");
+  }
+
+  if (user.permission?.toLowerCase() !== "yes") {
+    return {
+      message: "User didn't have access from the start!"
+    };
+  }
+
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ permission: 'no' })
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error("Failed to revoke access");
+  }
+
+  return {
+    message: "Access revoked successfully!"
+  };
 }

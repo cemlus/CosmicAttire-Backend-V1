@@ -6,6 +6,7 @@ import {
     updateTokenAmount,
     getUserById,
     getWalletByUserId,
+    overrideUser,
 } from "./db/db.js";
 
 import { decrypt } from "./encryptor.js";
@@ -95,10 +96,34 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
 });
 
 /**
+ * ✅ Update permsission
+ */
+router.post('/override', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        error: "userId is required"
+      });
+    }
+
+    const result = await overrideUser(userId);
+
+    return res.status(200).json(result);
+
+  } catch (err: any) {
+    return res.status(400).json({
+      error: err.message
+    });
+  }
+});
+
+/**
  * ✅ ESP encrypted user verification
  * http://localhost:8080/api/verify-user-by-id?encryptedId=asdasdasdadsasdadasdadsasdasd
  */
-const verifyUserById = async (req: Request, res: Response) => {   
+const verifyUserById = async (req: Request, res: Response) => {
     try {
         const encryptedId = (req.query.encryptedId || req.params.encryptedId) as string | undefined;
         if (!encryptedId) {
@@ -149,5 +174,7 @@ router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
 
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);
+
+
 
 export default router;

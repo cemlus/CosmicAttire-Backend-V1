@@ -1,6 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { decryptPayload, encryptPayload } from "./crypto.js";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId, getRingDeviceAccess } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId, getRingDeviceAccess, overrideUser } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
@@ -16,52 +15,6 @@ interface ESPPayload {
   lat: number;
   lng: number;
 }
-
-
-espRouter.post("/test", async (req: Request, res: Response) => {
-  try {
-    // Accept either:
-    // 1) { data: "encrypted..." }
-    // 2) { encryptedPayload: "encrypted..." }
-    // 3) raw encrypted string body
-    const encryptedPayload =
-      typeof req.body === "string"
-        ? req.body
-        : req.body?.data ?? req.body?.encryptedPayload ?? req.body?.payload;
-
-    if (!encryptedPayload || typeof encryptedPayload !== "string") {
-      return res.status(400).json({ error: "Missing encrypted payload" });
-    }
-
-    console.log("Encrypted payload:", encryptedPayload);
-
-    const decrypted = decrypt(encryptedPayload);
-    const payload: ESPPayload = JSON.parse(decrypted as string);
-
-    console.log("🔓 Decrypted ESP payload:", payload);
-
-    // Match the actual keys you said ESP sends
-    const { uid, nfcid, device_id, token } = payload as any;
-
-    if (!uid || !nfcid || !device_id || !token) {
-      return res.status(400).json({
-        error: "Invalid payload: missing required fields",
-        received: payload,
-      });
-    }
-
-    const encryptedId = encrypt(uid);
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
-
-    return res.json({
-      data: `SUCCESS:${verificationLink}`,
-    });
-  } catch (err) {
-    console.error("❌ ESP /test error:", err);
-    return res.status(400).json({ error: "Security validation failed" });
-  }
-});
 
 interface ESPTestPayload {
   uid: string;
@@ -85,7 +38,7 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
 
     // 1. Decrypt the payload
     const decrypted = decrypt(encryptedPayload);
-    
+
     if (!decrypted) {
       return res.status(400).json({ error: "Decryption failed: Invalid or tampered payload" });
     }
@@ -114,9 +67,13 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
     const encryptedId = encrypt(uid);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+    const sendingPayload = {
+      data: `SUCCESS:${verificationLink}`,
+      isSuccess: 1
+    }
 
     return res.json({
-      data: `SUCCESS:${verificationLink}`,
+      sendingPayload
     });
   } catch (err) {
     console.error("❌ ESP /test-2 error:", err);
@@ -129,17 +86,29 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
  * Payload is sent in the Request Body as { "data": "BASE64_ENCRYPTED_STRING" }
  */
 espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
-  const { data: encryptedPayload } = req.body;
-
-  // console.log("this is the encrypted payload: ", encryptedPayload);
-
-  if (!encryptedPayload) {
-    return res.status(400).json({ error: "Missing encrypted payload" });
+  function sendFailedResponse(statusCode: number, body: string) {
+    const isError = statusCode >= 400 || body.startsWith("ERROR:");
+    return res.status(statusCode).json({
+      status: isError ? "ERROR" : "SUCCESS",
+      isSuccess: 0,
+      message: body.replace(/^ERROR:\s*/, ""),
+    });
   }
 
   try {
     // 1. Decrypt the ESP32 payload
-    const decrypted = decryptPayload(encryptedPayload);
+    const encryptedPayload =
+      typeof req.body === "string"
+        ? req.body
+        : req.body?.data ?? req.body?.encryptedPayload ?? req.body?.payload;
+
+    if (!encryptedPayload || typeof encryptedPayload !== "string") {
+      return sendFailedResponse(400, "ERROR: Encrypted Payload");
+    }
+
+    console.log("Encrypted payload:", encryptedPayload);
+
+    const decrypted = decrypt(encryptedPayload);
     const payload: ESPPayload = JSON.parse(decrypted as string);
     console.log("🔓 Decrypted ESP payload:", payload);
 
@@ -149,9 +118,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const now = Math.floor(Date.now() / 1000);
     const timeDiff = Math.abs(now - timestamp);
     if (timeDiff > 120) {
-      return res.status(403).json({
-        data: ("ERROR: Clock drift too high or Replay detected")
-      });
+      return sendFailedResponse(403, "ERROR: Clock drift too high or Replay detected");
     }
 
     // 3. Lookup Hardware Credential and User in Supabase
@@ -161,7 +128,7 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     ])
 
     if (!credential) {
-      return res.json({ data: ("ACCESS DENIED: Unrecognized Hardware") });
+      return sendFailedResponse(403, "ERROR: Unrecognized Hardware");
     }
 
     // 4. Geofence Validation
@@ -169,28 +136,32 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const radiusKM = credential.radius_m / 1000;
 
     if (dist > radiusKM) {
-      return res.json({ data: ("ACCESS DENIED: Location Mismatch") });
+      return sendFailedResponse(403, "ERROR: Location Mismatch");
     }
 
     // 5. NFC Hardware ID Validation
     if (credential.nfc_id && credential.nfc_id !== nfc_id) {
-      return res.json({ data: ("ACCESS DENIED: Hardware Tampered") });
+      return sendFailedResponse(403, "ERROR: Hardware Tampered");
     }
 
     // 6. Check user permission (Must be "yes")
     const user = await getUserById(userId?.user_id as string);
 
     if (!user || user.permission?.toLowerCase() !== "yes") {
-      return res.json({ data: ("ACCESS DENIED: User Unauthorized") });
+      return sendFailedResponse(403, "ERROR: User Unauthorized");
     }
 
     // 7. Success - Generate the one-time verification link
     const encryptedId = encrypt(userId?.user_id as string);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+    const sendingPayload = {
+      data: `SUCCESS:${verificationLink}`,
+      isSuccess: 1
+    }
 
     return res.json({
-      data: (`SUCCESS:${verificationLink}`)
+      sendingPayload
     });
 
   } catch (err) {
@@ -210,7 +181,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
   const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
     if (isEncryptedRequest) {
       const text = typeof body === "string" ? body : JSON.stringify(body);
-      return res.status(statusCode).json({ data: encryptPayload(text) });
+      return res.status(statusCode).json({ data: encrypt(text) });
     }
 
     if (typeof body === "string") {
@@ -226,7 +197,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 
   try {
     const decryptedPayload = isEncryptedRequest
-      ? decryptPayload(encryptedPayload)
+      ? decrypt(encryptedPayload)
       : JSON.stringify(req.body);
     const {
       nfc_id,
@@ -236,7 +207,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       timestamp,
       lat,
       lng,
-    } = JSON.parse(decryptedPayload);
+    } = JSON.parse(decryptedPayload as string);
 
     if (
       !nfc_id ||
@@ -416,6 +387,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 
     return sendPaymentResponse(200, {
       status: "SUCCESS",
+      isSuccess: 1,
       message: "Tokens transferred successfully",
       transaction_id: txData.id,
       customer_id: customerId,

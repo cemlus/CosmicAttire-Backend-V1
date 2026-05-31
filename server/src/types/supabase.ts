@@ -1,4 +1,6 @@
-export type Json =
+Need to install the following packages:
+supabase@2.102.0
+Ok to proceed? (y) export type Json =
   | string
   | number
   | boolean
@@ -14,6 +16,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      organization_memberships: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_memberships_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       otp_verifications: {
         Row: {
           created_at: string
@@ -44,6 +109,8 @@ export type Database = {
           id: string
           location: string | null
           mac_address: string
+          organization_id: string | null
+          reader_type: string | null
           shopkeeper_id: string
           updated_at: string
         }
@@ -52,6 +119,8 @@ export type Database = {
           id?: string
           location?: string | null
           mac_address: string
+          organization_id?: string | null
+          reader_type?: string | null
           shopkeeper_id: string
           updated_at?: string
         }
@@ -60,10 +129,59 @@ export type Database = {
           id?: string
           location?: string | null
           mac_address?: string
+          organization_id?: string | null
+          reader_type?: string | null
           shopkeeper_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payment_devices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reader_access: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          reader_id: string
+          ring_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          reader_id: string
+          ring_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          reader_id?: string
+          ring_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reader_access_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reader_access_reader_id_fkey"
+            columns: ["reader_id"]
+            isOneToOne: false
+            referencedRelation: "payment_devices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ring_device_access: {
         Row: {
@@ -145,6 +263,7 @@ export type Database = {
           id: string
           location: string | null
           merchant: string | null
+          organization_id: string | null
           ring_id: string | null
           status: string
           type: string
@@ -158,6 +277,7 @@ export type Database = {
           id?: string
           location?: string | null
           merchant?: string | null
+          organization_id?: string | null
           ring_id?: string | null
           status?: string
           type: string
@@ -171,12 +291,20 @@ export type Database = {
           id?: string
           location?: string | null
           merchant?: string | null
+          organization_id?: string | null
           ring_id?: string | null
           status?: string
           type?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_ring_id_fkey"
             columns: ["ring_id"]
@@ -192,6 +320,7 @@ export type Database = {
           created_at: string
           details: Json
           id: string
+          organization_id: string | null
           user_id: string | null
         }
         Insert: {
@@ -199,6 +328,7 @@ export type Database = {
           created_at?: string
           details?: Json
           id?: string
+          organization_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -206,9 +336,18 @@ export type Database = {
           created_at?: string
           details?: Json
           id?: string
+          organization_id?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_profiles: {
         Row: {

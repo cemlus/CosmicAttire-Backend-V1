@@ -52,6 +52,8 @@ create table if not exists public.payment_devices (
   mac_address text not null unique,
   location text,
   shopkeeper_id uuid not null references auth.users(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete cascade,
+  reader_type text default 'payment',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -62,6 +64,7 @@ create table if not exists public.transactions (
   ring_id uuid references public.rings(id) on delete set null,
   amount numeric not null,
   type text not null check (type in ('payment', 'refund', 'topup')),
+  organization_id uuid references public.organizations(id) on delete set null,
   description text,
   merchant text,
   category text,
@@ -74,6 +77,7 @@ create table if not exists public.user_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
   action text not null,
+  organization_id uuid references public.organizations(id) on delete set null,
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -105,4 +109,30 @@ create table public.ring_device_access (
   updated_at timestamptz not null default now(),
 
   constraint ring_device_access_unique unique (ring_id, mac_address, shopkeeper_id)
+);
+
+create table public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  type text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.organization_memberships (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  role text not null check (role in ('user', 'minor_admin', 'admin')),
+  created_at timestamptz not null default now(),
+  unique (organization_id, user_id)
+);
+
+create table public.reader_access (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  ring_id text not null,
+  reader_id uuid not null references public.payment_devices(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (ring_id, reader_id)
 );

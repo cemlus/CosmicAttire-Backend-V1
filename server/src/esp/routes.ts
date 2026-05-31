@@ -1,5 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getPaymentMachine, getRingFromRingId, getWalletByUserId, getRingDeviceAccess, overrideUser } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
@@ -140,8 +140,11 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     }
 
     // 5. NFC Hardware ID Validation
-    if (credential.nfc_id && credential.nfc_id !== nfc_id) {
-      return sendFailedResponse(403, "ERROR: Hardware Tampered");
+    const reader = await getDeviceByMacAddress(mac);
+    const access = await getReaderAccess(nfc_id, reader.id);
+
+    if (!access) {
+      return sendFailedResponse(403, "ERROR: User not permitted on this reader");
     }
 
     // 6. Check user permission (Must be "yes")
@@ -239,14 +242,12 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     const nowMs = Date.now();
     const payloadMs = tsNum > 1e12 ? tsNum : tsNum * 1000;
     const timeDiff = Math.abs(nowMs - payloadMs);
-
     if (timeDiff > 120000) {
       return sendPaymentResponse(403, "ERROR: Clock drift too high or Replay detected");
     }
 
     // Check 2 -> Verify device
-    const paymentDevice = await getPaymentMachine(mac_address);
-
+    const paymentDevice = await getDeviceByMacAddress(mac_address);
     if (!paymentDevice || paymentDevice.mac_address !== mac_address) {
       return sendPaymentResponse(403, "ERROR: Payment device doesn't exist");
     }
@@ -256,48 +257,35 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       return sendPaymentResponse(403, "ERROR: Shopkeeper does not match device");
     }
 
-    // Check 4 -> Ring validation
-    const ring = await getRingFromRingId(nfc_id);
+    const organizationId = paymentDevice.organization_id;
 
+    // Check 4 -> Ring validation
+    const ring = await getRingByRingId(nfc_id);
     if (!ring || ring.ring_id !== nfc_id) {
       return sendPaymentResponse(403, "ERROR: Invalid Ring");
     }
 
     const customerId = ring.user_id;
-
     const user = await getUserIdByNFCId(nfc_id);
     if (!user || String(user.user_id) !== String(customerId)) {
       return sendPaymentResponse(403, "ERROR: Ring doesn't belong to user");
     }
 
-    // validate if ring is allowed for this device/shopkeeper
-
-    const access = await getRingDeviceAccess(
-      nfc_id,
-      mac_address,
-      shopkeeper_id
-    );
-
+    // Check 5 -> validate if ring is allowed for this reader
+    const access = await getReaderAccess(nfc_id, paymentDevice.id)
     if (!access) {
-      return sendPaymentResponse(403, "ERROR: Ring is not allowed for this payment device");
+      return sendPaymentResponse(403, "ERROR: Ring is not authorized for this payment device");
     }
 
-    if (String(access.user_id) !== String(ring.user_id)) {
-      return sendPaymentResponse(403, "ERROR: Ring access record does not match user");
-    }
-
-    // Check 5 -> Wallet validation
+    // Check 6 -> Wallet validation
     const customerWallet = await getWalletByUserId(customerId);
     const shopkeeperWallet = await getWalletByUserId(shopkeeper_id);
-
     if (!customerWallet) {
       return sendPaymentResponse(403, "ERROR: Customer wallet not found");
     }
-
     if (!shopkeeperWallet) {
       return sendPaymentResponse(403, "ERROR: Shopkeeper wallet not found");
     }
-
     if (amountNum > Number(customerWallet.balance)) {
       return sendPaymentResponse(403, "ERROR: Insufficient balance in wallet");
     }
@@ -350,7 +338,8 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
       .from("transactions")
       .insert({
         user_id: customerId,
-        ring_id: ring.id,
+        organization_id: paymentDevice.organization_id,
+        ring_id: nfc_id,
         amount: amountNum,
         type: "payment",
         description: "Ring payment",

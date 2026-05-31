@@ -165,7 +165,7 @@ export async function updateTokenAmount(username: string, token: string, newToke
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
     .from("verification_credentials")
-    .select("lat, lng, radius_m, label, nfc_id")
+    .select("lat, lng, radius_m, label")
     .eq("mac_address", mac_address)
     .single();
 
@@ -192,31 +192,18 @@ export async function getUserIdByNFCId(nfc_id: string) {
   return data;
 }
 
-export async function getPaymentMachine(mac_address: string) {
-  const { data, error } = await supabase
-    .from("payment_devices")
-    .select("shopkeeper_id, mac_address, location")
-    .eq("mac_address", mac_address)
-    .single();
 
-  if (error || !data) {
-    console.warn("⚠️ Not a valid MAC-Address", mac_address);
-    return null;
-  }
-
-  return data;
-}
-
-export async function getRingFromRingId(ring_id: string) {
+export async function getRingByRingId(ring_id: string) {
   const { data, error } = await supabase
     .from("rings")
-    .select("id, ring_id, status, user_id")
+    .select("*")
     .eq("ring_id", ring_id)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    console.warn("⚠️ Not a valid MAC-Address", ring_id);
-    return null;
+  if (error) {
+    throw new Error(
+      `Failed to fetch ring: ${error.message}`
+    );
   }
 
   return data;
@@ -283,4 +270,103 @@ export async function overrideUser(userId: string) {
   return {
     message: "Access revoked successfully!"
   };
+}
+
+
+export async function getOrganizationById(organizationId: string) {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("id", organizationId)
+    .single();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch organization: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
+
+export async function getMembershipByUserAndOrg(
+  userId: string,
+  organizationId: string
+) {
+  const { data, error } = await supabase
+    .from("organization_memberships")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch membership: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
+
+export async function getDeviceByMacAddress(
+  macAddress: string
+) {
+  const { data, error } = await supabase
+    .from("payment_devices")
+    .select("*")
+    .eq("mac_address", macAddress)
+    .single();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch device: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
+
+export async function getReaderAccess(
+  ringId: string,
+  readerId: string
+) {
+  const { data, error } = await supabase
+    .from("reader_access")
+    .select("*")
+    .eq("ring_id", ringId)
+    .eq("reader_id", readerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch reader access: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
+
+export async function getTransactionsByOrganizationId(
+  organizationId: string
+) {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", {
+      ascending: false
+    });
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch transactions: ${error.message}`
+    );
+  }
+
+  return data;
 }

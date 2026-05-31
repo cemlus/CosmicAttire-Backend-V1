@@ -10,6 +10,7 @@ import {
 } from "./db/db.js";
 
 import { decrypt } from "./encryptor.js";
+// import  from "./adminRoutes.js";
 
 const router = express.Router();
 
@@ -175,6 +176,6 @@ router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);
 
-
+// router.use('/organization', orgRouter)
 
 export default router;

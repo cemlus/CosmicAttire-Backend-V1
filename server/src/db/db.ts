@@ -370,3 +370,121 @@ export async function getTransactionsByOrganizationId(
 
   return data;
 }
+
+
+// Admin functions
+type OrgRole = "user" | "minor_admin" | "admin";
+
+type MembershipRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: OrgRole;
+  created_at: string;
+};
+
+export type UserRow = {
+  user_id: string;
+  username: string;
+  email: string;
+  type?: string | null;
+  public_data?: any;
+};
+
+
+export function isSuperAdmin(user: UserRow | null): boolean {
+  if (!user) return false;
+
+  const typeValue = (user.type ?? "").toLowerCase();
+  const roleValue =
+    (user.public_data?.role ?? user.public_data?.type ?? "").toLowerCase();
+
+  return typeValue === "super_admin" || roleValue === "super_admin";
+}
+
+
+export function getCurrentUserId(req: Request): string | null {
+  // Replace this with your existing auth middleware source of truth.
+  // Examples:
+  // req.user?.id
+  // req.auth?.userId
+  const user = (req as any).user;
+  return user?.id ?? null;
+}
+
+
+
+export async function getCurrentUserRow(userId: string): Promise<UserRow | null> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to fetch current user: ${error.message}`);
+  }
+
+  return data;
+}
+
+async function getMembership(
+  userId: string,
+  organizationId: string
+): Promise<MembershipRow | null> {
+  const { data, error } = await supabase
+    .from("organization_memberships")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch membership: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function requireOrgAccess(
+  req: Request,
+  organizationId: string,
+  allowedRoles: OrgRole[] = ["minor_admin", "admin"]
+): Promise<{
+  actingUserId: string;
+  actingUser: UserRow;
+  membership: MembershipRow | null;
+  superAdmin: boolean;
+}> {
+  const actingUserId = getCurrentUserId(req);
+  if (!actingUserId) {
+    throw new Error("Unauthorized");
+  }
+
+  const actingUser = await getCurrentUserRow(actingUserId);
+  if (!actingUser) {
+    throw new Error("Unauthorized");
+  }
+
+  const superAdmin = isSuperAdmin(actingUser);
+  if (superAdmin) {
+    return {
+      actingUserId,
+      actingUser,
+      membership: null,
+      superAdmin: true,
+    };
+  }
+
+  const membership = await getMembership(actingUserId, organizationId);
+  if (!membership || !allowedRoles.includes(membership.role)) {
+    throw new Error("Forbidden");
+  }
+
+  return {
+    actingUserId,
+    actingUser,
+    membership,
+    superAdmin: false,
+  };
+}

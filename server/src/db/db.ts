@@ -113,8 +113,14 @@ export async function getProtectedProfileData(username: string, token: string) {
 
   if (error || !profile) throw new Error('Profile not found');
 
-  // Logic check: ensure token is in the protected_url
-  if (!profile.protected_url?.includes(`token=${token}`)) {
+  // Logic check: ensure token matches exactly in the protected_url
+  try {
+    const url = new URL(profile.protected_url || "", "http://localhost");
+    const expectedToken = url.searchParams.get("token");
+    if (!expectedToken || expectedToken !== token) {
+      throw new Error('Invalid token');
+    }
+  } catch {
     throw new Error('Invalid token');
   }
 
@@ -140,7 +146,15 @@ export async function updateTokenAmount(username: string, token: string, newToke
     .single();
 
   if (fetchError || !profile) throw new Error('Profile not found');
-  if (!profile.protected_url?.includes(`token=${token}`)) throw new Error('Invalid token');
+  try {
+    const url = new URL(profile.protected_url || "", "http://localhost");
+    const expectedToken = url.searchParams.get("token");
+    if (!expectedToken || expectedToken !== token) {
+      throw new Error('Invalid token');
+    }
+  } catch {
+    throw new Error('Invalid token');
+  }
 
   // Typed JSON update
   const updatedProtected = {

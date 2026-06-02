@@ -1,5 +1,6 @@
 import path from 'path';
 import { supabase } from './supaBaseClient.js';
+import { type Request } from "express";
 
 /**
  * Helper: Extract name from the jsonb public_data field
@@ -112,8 +113,14 @@ export async function getProtectedProfileData(username: string, token: string) {
 
   if (error || !profile) throw new Error('Profile not found');
 
-  // Logic check: ensure token is in the protected_url
-  if (!profile.protected_url?.includes(`token=${token}`)) {
+  // Logic check: ensure token matches exactly in the protected_url
+  try {
+    const url = new URL(profile.protected_url || "", "http://localhost");
+    const expectedToken = url.searchParams.get("token");
+    if (!expectedToken || expectedToken !== token) {
+      throw new Error('Invalid token');
+    }
+  } catch {
     throw new Error('Invalid token');
   }
 
@@ -139,7 +146,15 @@ export async function updateTokenAmount(username: string, token: string, newToke
     .single();
 
   if (fetchError || !profile) throw new Error('Profile not found');
-  if (!profile.protected_url?.includes(`token=${token}`)) throw new Error('Invalid token');
+  try {
+    const url = new URL(profile.protected_url || "", "http://localhost");
+    const expectedToken = url.searchParams.get("token");
+    if (!expectedToken || expectedToken !== token) {
+      throw new Error('Invalid token');
+    }
+  } catch {
+    throw new Error('Invalid token');
+  }
 
   // Typed JSON update
   const updatedProtected = {
@@ -165,7 +180,7 @@ export async function updateTokenAmount(username: string, token: string, newToke
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
     .from("verification_credentials")
-    .select("lat, lng, radius_m, label")
+    .select("lat, lng, radius_m, label, nfc_id")
     .eq("mac_address", mac_address)
     .single();
 
@@ -318,7 +333,7 @@ export async function getDeviceByMacAddress(
     .from("payment_devices")
     .select("*")
     .eq("mac_address", macAddress)
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw new Error(
@@ -369,4 +384,127 @@ export async function getTransactionsByOrganizationId(
   }
 
   return data;
+}
+
+
+// Admin functions
+type OrgRole = "user" | "minor_admin" | "admin";
+
+type MembershipRow = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: OrgRole;
+  created_at: string;
+};
+
+export type UserRow = {
+  user_id: string;
+  username: string;
+  email: string | null;
+  type?: string | null;
+  public_data?: any;
+};
+
+
+export function isSuperAdmin(user: UserRow | null): boolean {
+  if (!user) return false;
+
+  const typeValue = (user.type ?? "").toLowerCase();
+  const roleValue =
+    (user.public_data?.role ?? user.public_data?.type ?? "").toLowerCase();
+
+  return typeValue === "super_admin" || roleValue === "super_admin";
+}
+
+
+export async function getCurrentUserId(req: Request): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
+
+export async function getCurrentUserRow(userId: string): Promise<UserRow | null> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to fetch current user: ${error.message}`);
+  }
+
+  return data as UserRow | null;
+}
+
+async function getMembership(
+  userId: string,
+  organizationId: string
+): Promise<MembershipRow | null> {
+  const { data, error } = await supabase
+    .from("organization_memberships")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch membership: ${error.message}`);
+  }
+
+  return data as MembershipRow | null;
+}
+
+export async function requireOrgAccess(
+  req: Request,
+  organizationId: string,
+  allowedRoles: OrgRole[] = ["minor_admin", "admin"]
+): Promise<{
+  actingUserId: string;
+  actingUser: UserRow;
+  membership: MembershipRow | null;
+  superAdmin: boolean;
+}> {
+  const actingUserId = await getCurrentUserId(req);
+  if (!actingUserId) {
+    throw new Error("Unauthorized");
+  }
+
+  const actingUser = await getCurrentUserRow(actingUserId);
+  if (!actingUser) {
+    throw new Error("Unauthorized");
+  }
+
+  const superAdmin = isSuperAdmin(actingUser);
+  if (superAdmin) {
+    return {
+      actingUserId,
+      actingUser,
+      membership: null,
+      superAdmin: true,
+    };
+  }
+
+  const membership = await getMembership(actingUserId, organizationId);
+  if (!membership || !allowedRoles.includes(membership.role)) {
+    throw new Error("Forbidden");
+  }
+
+  return {
+    actingUserId,
+    actingUser,
+    membership,
+    superAdmin: false,
+  };
 }

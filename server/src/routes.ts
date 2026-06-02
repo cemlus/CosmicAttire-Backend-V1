@@ -89,7 +89,11 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
         if (!username) {
             return res.status(400).json({ error: "Invalid username" });
         }
-        const result = await updateTokenAmount(username, token, Number(new_token_amount));
+        const amount = Number(new_token_amount);
+        if (Number.isNaN(amount) || !Number.isFinite(amount)) {
+            return res.status(400).json({ error: "Invalid new_token_amount: must be a valid finite number" });
+        }
+        const result = await updateTokenAmount(username, token, amount);
         res.json(result);
     } catch (err: any) {
         res.status(400).json({ error: err.message });

@@ -42,6 +42,23 @@ begin
     new.public_profile_url := old.public_profile_url;
     new.permission := old.permission;
     new.is_ticket_paid := old.is_ticket_paid;
+
+    -- Prevent escalation by protecting public_data->'role' and public_data->'type'
+    if coalesce(new.public_data->>'role', '') <> coalesce(old.public_data->>'role', '') then
+      if (old.public_data ? 'role') then
+        new.public_data := jsonb_set(new.public_data, '{role}', old.public_data->'role');
+      else
+        new.public_data := new.public_data - 'role';
+      end if;
+    end if;
+
+    if coalesce(new.public_data->>'type', '') <> coalesce(old.public_data->>'type', '') then
+      if (old.public_data ? 'type') then
+        new.public_data := jsonb_set(new.public_data, '{type}', old.public_data->'type');
+      else
+        new.public_data := new.public_data - 'type';
+      end if;
+    end if;
   end if;
 
   new.updated_at = now();

@@ -1,5 +1,6 @@
 import path from 'path';
 import { supabase } from './supaBaseClient.js';
+import { type Request } from "express";
 
 /**
  * Helper: Extract name from the jsonb public_data field
@@ -165,7 +166,7 @@ export async function updateTokenAmount(username: string, token: string, newToke
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
     .from("verification_credentials")
-    .select("lat, lng, radius_m, label")
+    .select("lat, lng, radius_m, label, nfc_id")
     .eq("mac_address", mac_address)
     .single();
 
@@ -318,7 +319,7 @@ export async function getDeviceByMacAddress(
     .from("payment_devices")
     .select("*")
     .eq("mac_address", macAddress)
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw new Error(
@@ -386,7 +387,7 @@ type MembershipRow = {
 export type UserRow = {
   user_id: string;
   username: string;
-  email: string;
+  email: string | null;
   type?: string | null;
   public_data?: any;
 };
@@ -403,15 +404,20 @@ export function isSuperAdmin(user: UserRow | null): boolean {
 }
 
 
-export function getCurrentUserId(req: Request): string | null {
-  // Replace this with your existing auth middleware source of truth.
-  // Examples:
-  // req.user?.id
-  // req.auth?.userId
-  const user = (req as any).user;
-  return user?.id ?? null;
+export async function getCurrentUserId(req: Request): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
 }
-
 
 
 export async function getCurrentUserRow(userId: string): Promise<UserRow | null> {
@@ -425,7 +431,7 @@ export async function getCurrentUserRow(userId: string): Promise<UserRow | null>
     throw new Error(`Failed to fetch current user: ${error.message}`);
   }
 
-  return data;
+  return data as UserRow | null;
 }
 
 async function getMembership(
@@ -443,7 +449,7 @@ async function getMembership(
     throw new Error(`Failed to fetch membership: ${error.message}`);
   }
 
-  return data;
+  return data as MembershipRow | null;
 }
 
 export async function requireOrgAccess(
@@ -456,7 +462,7 @@ export async function requireOrgAccess(
   membership: MembershipRow | null;
   superAdmin: boolean;
 }> {
-  const actingUserId = getCurrentUserId(req);
+  const actingUserId = await getCurrentUserId(req);
   if (!actingUserId) {
     throw new Error("Unauthorized");
   }

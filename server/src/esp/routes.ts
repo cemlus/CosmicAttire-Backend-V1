@@ -115,6 +115,9 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const { nfc_id, mac, timestamp, lat, lng } = payload;
 
     // 2. Validate timestamp (2 minute window / 120 seconds)
+    if (timestamp == null || typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
+      return sendFailedResponse(403, "ERROR: Clock drift too high or Replay detected");
+    }
     const now = Math.floor(Date.now() / 1000);
     const timeDiff = Math.abs(now - timestamp);
     if (timeDiff > 120) {
@@ -141,10 +144,16 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
 
     // 5. NFC Hardware ID Validation
     const reader = await getDeviceByMacAddress(mac);
-    const access = await getReaderAccess(nfc_id, reader.id);
-
-    if (!access) {
-      return sendFailedResponse(403, "ERROR: User not permitted on this reader");
+    if (reader) {
+      const access = await getReaderAccess(nfc_id, reader.id);
+      if (!access) {
+        return sendFailedResponse(403, "ERROR: User not permitted on this reader");
+      }
+    } else {
+      // Fallback: If device is not in payment_devices, check legacy verification_credentials gate NFC rule
+      if (credential.nfc_id && credential.nfc_id !== nfc_id) {
+        return sendFailedResponse(403, "ERROR: Hardware Tampered");
+      }
     }
 
     // 6. Check user permission (Must be "yes")

@@ -12,7 +12,7 @@ adminRouter.get(
     "/organizations/:organizationId",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId } = req.params;
+            const { organizationId } = req.params as { organizationId: string };
             const ctx = await requireOrgAccess(req, organizationId, [
                 "minor_admin",
                 "admin",
@@ -52,7 +52,7 @@ adminRouter.get(
     "/organizations/:organizationId/members",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId } = req.params;
+            const { organizationId } = req.params as { organizationId: string };
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -64,11 +64,11 @@ adminRouter.get(
           user_id,
           role,
           created_at,
-          users:user_id (
-            id,
+          user_profiles:user_id (
+            id:user_id,
             username,
             email,
-            type,
+            role,
             public_data
           )
         `
@@ -98,7 +98,7 @@ adminRouter.get(
     "/organizations/:organizationId/transactions",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId } = req.params;
+            const { organizationId } = req.params as { organizationId: string };
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -129,7 +129,7 @@ adminRouter.get(
     "/organizations/:organizationId/logs",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId } = req.params;
+            const { organizationId } = req.params as { organizationId: string };
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -161,7 +161,7 @@ adminRouter.post(
     "/organizations/:organizationId/members/minor-admins",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId } = req.params;
+            const { organizationId } = req.params as { organizationId: string };
             const { user_id } = req.body;
 
             if (!user_id) {
@@ -171,9 +171,9 @@ adminRouter.post(
             const ctx = await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { data: existingUser, error: userErr } = await supabase
-                .from("users")
-                .select("id")
-                .eq("id", user_id)
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", user_id)
                 .maybeSingle();
 
             if (userErr) {
@@ -225,7 +225,7 @@ adminRouter.delete(
     "/organizations/:organizationId/members/minor-admins/:userId",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId, userId } = req.params;
+            const { organizationId, userId } = req.params as { organizationId: string; userId: string };
             await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { error } = await supabase
@@ -258,7 +258,7 @@ adminRouter.post(
     "/organizations/:organizationId/readers/:readerId/access",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId, readerId } = req.params;
+            const { organizationId, readerId } = req.params as { organizationId: string; readerId: string };
             const { ring_id } = req.body;
 
             if (!ring_id) {
@@ -331,7 +331,7 @@ adminRouter.delete(
     "/organizations/:organizationId/readers/:readerId/access/:ringId",
     async (req: Request, res: Response) => {
         try {
-            const { organizationId, readerId, ringId } = req.params;
+            const { organizationId, readerId, ringId } = req.params as { organizationId: string; readerId: string; ringId: string };
             await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { error } = await supabase

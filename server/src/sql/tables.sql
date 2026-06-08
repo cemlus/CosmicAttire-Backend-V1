@@ -54,6 +54,8 @@ create table if not exists public.payment_devices (
   shopkeeper_id uuid not null references auth.users(id) on delete cascade,
   organization_id uuid references public.organizations(id) on delete cascade,
   reader_type text default 'payment',
+  device_secret text,
+  hardware_uid text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

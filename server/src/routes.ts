@@ -9,7 +9,7 @@ import {
     overrideUser,
 } from "./db/db.js";
 
-import { decrypt } from "./encryptor.js";
+import { decrypt, encrypt } from "./encryptor.js";
 // import  from "./adminRoutes.js";
 
 const router = express.Router();
@@ -43,6 +43,8 @@ router.get("/profile/:encryptedId", async (req: Request, res: Response) => {
         res.status(404).json({ error: "Invalid or expired profile link" });
     }
 });
+
+console.log(encrypt("36c973ef-a786-46ed-8be0-ecc4dc63ccc8"));
 
 /**
  * ✅ Public profile by username
@@ -179,6 +181,36 @@ router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
 
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);
+
+/**
+ * Generate a networking profile URL for a given userId.
+ * Encrypts the userId with AES and returns the full profile link.
+ *
+ * GET /api/networking-url/:userId
+ * Response: { url: "http://<host>/profile/<encryptedUserId>" }
+ */
+router.get("/networking-url/:userId", (req: Request, res: Response) => {
+    try {
+        const userId = req.params.userId as string;
+        if (!userId) {
+            return res.status(400).json({ error: "userId is required" });
+        }
+
+        const encryptedId = encrypt(userId);
+        if (!encryptedId) {
+            return res.status(500).json({ error: "Encryption failed" });
+        }
+
+        const protocol = req.protocol;
+        const host = req.get("host");
+        const profileUrl = `${protocol}://${host}/profile/${encodeURIComponent(encryptedId)}`;
+
+        res.status(200).json({ url: profileUrl });
+    } catch (err: any) {
+        console.error("❌ Networking URL generation error:", err.message);
+        res.status(500).json({ error: "Failed to generate networking URL" });
+    }
+});
 
 // router.use('/organization', orgRouter)
 

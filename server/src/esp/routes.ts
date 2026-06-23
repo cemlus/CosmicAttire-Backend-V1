@@ -191,20 +191,28 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
   const isEncryptedRequest = typeof encryptedPayload === "string" && encryptedPayload.length > 0;
 
   const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
-    if (isEncryptedRequest) {
-      const text = typeof body === "string" ? body : JSON.stringify(body);
-      return res.status(statusCode).json({ data: encrypt(text) });
-    }
+    const isError = statusCode >= 400 || (typeof body === "string" && body.startsWith("ERROR:"));
+    const approvedVal = isError ? 0 : 1;
 
+    let responseObj: Record<string, any>;
     if (typeof body === "string") {
-      const isError = statusCode >= 400 || body.startsWith("ERROR:");
-      return res.status(statusCode).json({
+      responseObj = {
         status: isError ? "ERROR" : "SUCCESS",
+        isSuccess: approvedVal,
         message: body.replace(/^ERROR:\s*/, ""),
-      });
+      };
+    } else {
+      responseObj = {
+        ...body,
+        isSuccess: approvedVal,
+      };
     }
 
-    return res.status(statusCode).json(body);
+    if (isEncryptedRequest) {
+      return res.status(statusCode).json({ data: encrypt(JSON.stringify(responseObj)) });
+    }
+
+    return res.status(statusCode).json(responseObj);
   };
 
   try {
@@ -417,20 +425,28 @@ espRouter.post("/verify-2", async (req: Request, res: Response) => {
   const isEncryptedRequest = typeof encryptedPayload === "string" && encryptedPayload.length > 0;
 
   const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
-    if (isEncryptedRequest) {
-      const text = typeof body === "string" ? body : JSON.stringify(body);
-      return res.status(statusCode).json({ data: encrypt(text) });
-    }
+    const isError = statusCode >= 400 || (typeof body === "string" && body.startsWith("ERROR:"));
+    const approvedVal = isError ? 0 : 1;
 
+    let responseObj: Record<string, any>;
     if (typeof body === "string") {
-      const isError = statusCode >= 400 || body.startsWith("ERROR:");
-      return res.status(statusCode).json({
+      responseObj = {
         status: isError ? "ERROR" : "SUCCESS",
+        isSuccess: approvedVal,
         message: body.replace(/^ERROR:\s*/, ""),
-      });
+      };
+    } else {
+      responseObj = {
+        ...body,
+        isSuccess: approvedVal,
+      };
     }
 
-    return res.status(statusCode).json(body);
+    if (isEncryptedRequest) {
+      return res.status(statusCode).json({ data: encrypt(JSON.stringify(responseObj)) });
+    }
+
+    return res.status(statusCode).json(responseObj);
   };
 
   try {

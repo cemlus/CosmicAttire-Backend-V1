@@ -508,3 +508,173 @@ export async function requireOrgAccess(
     superAdmin: false,
   };
 }
+
+
+// ─────────────────────────────────────────────────────
+// ESP Sync: Tap Logs & Idempotency
+// ─────────────────────────────────────────────────────
+
+export interface TapLogEntry {
+  user_id: string;
+  nfc_id: string;
+  reader_mac: string;
+  reader_id?: string | null;
+  reader_label?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  tapped_at: string;          // ISO 8601 timestamp
+  profile_link?: string | null;
+  source: "realtime" | "sync" | "cache";
+  approved?: boolean;
+}
+
+export interface SyncedESPEvent {
+  event_id: string;
+  esp_device_id: string;
+  tap_log_id?: string | null;
+  status: "processed" | "failed" | "skipped";
+  error_message?: string | null;
+  raw_payload: Record<string, unknown>;
+}
+
+/**
+ * Insert a tap log entry for conference tracking.
+ * Returns the created tap_log id.
+ *
+ * Note: Uses `as any` cast because tap_logs is not yet in the
+ * auto-generated Supabase types. Run `npm run update-types` after
+ * creating the table to get full type safety.
+ */
+export async function insertTapLog(tapLog: TapLogEntry) {
+  const { data, error } = await (supabase as any)
+    .from("tap_logs")
+    .insert({
+      user_id: tapLog.user_id,
+      nfc_id: tapLog.nfc_id,
+      reader_mac: tapLog.reader_mac,
+      reader_id: tapLog.reader_id ?? null,
+      reader_label: tapLog.reader_label ?? null,
+      lat: tapLog.lat ?? null,
+      lng: tapLog.lng ?? null,
+      tapped_at: tapLog.tapped_at,
+      profile_link: tapLog.profile_link ?? null,
+      source: tapLog.source,
+      approved: tapLog.approved ?? true,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("❌ Failed to insert tap_log:", error.message);
+    throw new Error(`Failed to insert tap_log: ${error.message}`);
+  }
+
+  return data as { id: string };
+}
+
+/**
+ * Check if an ESP event was already processed (idempotency check).
+ * Returns the synced event row if found, null otherwise.
+ */
+export async function getProcessedEvent(eventId: string) {
+  const { data, error } = await (supabase as any)
+    .from("synced_esp_events")
+    .select("id, event_id, status")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("❌ Idempotency check failed:", error.message);
+    return null;
+  }
+
+  return data as { id: string; event_id: string; status: string } | null;
+}
+
+/**
+ * Record a synced ESP event in the idempotency registry.
+ */
+export async function insertSyncedEvent(event: SyncedESPEvent) {
+  const { error } = await (supabase as any)
+    .from("synced_esp_events")
+    .insert({
+      event_id: event.event_id,
+      esp_device_id: event.esp_device_id,
+      tap_log_id: event.tap_log_id ?? null,
+      status: event.status,
+      error_message: event.error_message ?? null,
+      raw_payload: event.raw_payload,
+    });
+
+  if (error) {
+    console.error("❌ Failed to insert synced_esp_event:", error.message);
+    throw new Error(`Failed to insert synced_esp_event: ${error.message}`);
+  }
+}
+
+/**
+ * Get tap history for a specific user (conference attendance).
+ */
+export async function getTapLogsByUser(userId: string) {
+  const { data, error } = await (supabase as any)
+    .from("tap_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("tapped_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch tap_logs: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Get all approved NFC ring IDs for a specific reader.
+ * Used by ESP on boot to warm its local approved-user cache.
+ */
+export async function getApprovedRingsForReader(readerId: string) {
+  // 1. Get all ring_ids that have access to this reader
+  const { data: accessRows, error: accessError } = await supabase
+    .from("reader_access")
+    .select("ring_id")
+    .eq("reader_id", readerId);
+
+  if (accessError || !accessRows || accessRows.length === 0) {
+    return [];
+  }
+
+  const ringIds = accessRows.map((r) => r.ring_id);
+
+  // 2. Resolve each ring_id to a user_id from the rings table
+  const { data: rings, error: ringsError } = await supabase
+    .from("rings")
+    .select("ring_id, user_id")
+    .in("ring_id", ringIds);
+
+  if (ringsError || !rings) {
+    return [];
+  }
+
+  // 3. Check which users have permission = 'yes'
+  const userIds = rings.map((r) => r.user_id);
+  const { data: users, error: usersError } = await supabase
+    .from("user_profiles")
+    .select("user_id, permission")
+    .in("user_id", userIds)
+    .eq("permission", "yes");
+
+  if (usersError || !users) {
+    return [];
+  }
+
+  const approvedUserIds = new Set(users.map((u) => u.user_id));
+
+  // 4. Return only rings whose users are approved
+  return rings
+    .filter((r) => approvedUserIds.has(r.user_id))
+    .map((r) => ({
+      nfc_id: r.ring_id,
+      user_id: r.user_id,
+    }));
+}

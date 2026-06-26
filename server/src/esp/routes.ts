@@ -1,5 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getApprovedRingsForReader } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
@@ -167,6 +167,23 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const encryptedId = encrypt(userId?.user_id as string);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+
+    // 8. Record tap in tap_logs for conference tracking (fire-and-forget)
+    insertTapLog({
+      user_id: userId?.user_id as string,
+      nfc_id,
+      reader_mac: mac,
+      reader_label: credential?.label ?? null,
+      lat,
+      lng,
+      tapped_at: new Date(timestamp * 1000).toISOString(),
+      profile_link: verificationLink,
+      source: "realtime",
+      approved: true,
+    }).catch((err) => {
+      console.warn("⚠️  Failed to record tap_log (non-blocking):", (err as Error).message);
+    });
+
     const sendingPayload = {
       data: `SUCCESS:${verificationLink}`,
       isSuccess: 1
@@ -584,5 +601,37 @@ function getDistanceKM(lat1: number, lon1: number, lat2: number, lon2: number): 
 function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
 }
+
+/**
+ * GET /cache-sync
+ * Returns list of approved NFC IDs for a specific reader.
+ * Used by Reader ESP on boot to pre-populate its local approved-user cache.
+ *
+ * Query params:
+ *   reader_id (required) - UUID of the payment_device / reader
+ *
+ * Response: { approved: [{ nfc_id, user_id }] }
+ */
+espRouter.get("/cache-sync", async (req: Request, res: Response) => {
+  try {
+    const readerId = req.query.reader_id as string;
+
+    if (!readerId) {
+      return res.status(400).json({ error: "Missing required query param: reader_id" });
+    }
+
+    const approvedRings = await getApprovedRingsForReader(readerId);
+
+    return res.json({
+      reader_id: readerId,
+      approved: approvedRings,
+      count: approvedRings.length,
+      cached_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("❌ /cache-sync error:", (err as Error).message);
+    return res.status(500).json({ error: "Failed to fetch approved rings" });
+  }
+});
 
 export default espRouter;

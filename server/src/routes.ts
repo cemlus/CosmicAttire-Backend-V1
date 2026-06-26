@@ -7,9 +7,11 @@ import {
     getUserById,
     getWalletByUserId,
     overrideUser,
+    getCurrentUserId,
 } from "./db/db.js";
 
 import { decrypt, encrypt } from "./encryptor.js";
+import { supabase } from "./db/supaBaseClient.js";
 // import  from "./adminRoutes.js";
 
 const router = express.Router();
@@ -213,5 +215,65 @@ router.get("/networking-url/:userId", (req: Request, res: Response) => {
 });
 
 // router.use('/organization', orgRouter)
+
+// ─────────────────────────────────────────────────────
+// FCM Push Notifications - Device Tokens
+// ─────────────────────────────────────────────────────
+
+// POST /device-tokens — Register FCM token (called on app login)
+router.post("/device-tokens", async (req: Request, res: Response) => {
+  const userId = await getCurrentUserId(req);
+  if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { fcm_token, platform, device_name } = req.body;
+  if (!fcm_token) {
+      return res.status(400).json({ error: "Missing fcm_token" });
+  }
+
+  const { error } = await (supabase as any)
+    .from("device_tokens")
+    .upsert({
+      user_id: userId,
+      fcm_token,
+      platform: platform || "android",
+      device_name: device_name || null,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,fcm_token" });
+
+  if (error) {
+      console.error("❌ Failed to register device token:", error.message);
+      return res.status(500).json({ error: error.message });
+  }
+  return res.json({ message: "Token registered" });
+});
+
+// DELETE /device-tokens — Unregister on logout
+router.delete("/device-tokens", async (req: Request, res: Response) => {
+  const userId = await getCurrentUserId(req);
+  if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { fcm_token } = req.body;
+  if (!fcm_token) {
+      return res.status(400).json({ error: "Missing fcm_token" });
+  }
+
+  const { error } = await (supabase as any)
+    .from("device_tokens")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("fcm_token", fcm_token);
+
+  if (error) {
+      console.error("❌ Failed to deactivate device token:", error.message);
+      return res.status(500).json({ error: error.message });
+  }
+
+  return res.json({ message: "Token deactivated" });
+});
 
 export default router;

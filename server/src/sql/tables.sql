@@ -138,3 +138,48 @@ create table public.reader_access (
   created_at timestamptz not null default now(),
   unique (ring_id, reader_id)
 );
+
+-- ─────────────────────────────────────────────────────
+-- ESP Sync: Conference Tracking & Idempotency
+-- ─────────────────────────────────────────────────────
+
+create table if not exists public.tap_logs (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       text not null,
+  nfc_id        text not null,
+  reader_mac    text not null,
+  reader_id     text,
+  reader_label  text,
+  lat           double precision,
+  lng           double precision,
+  tapped_at     timestamptz not null,
+  profile_link  text,
+  source        text not null default 'sync'
+    check (source in ('realtime', 'sync', 'cache')),
+  approved      boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.synced_esp_events (
+  id            uuid primary key default gen_random_uuid(),
+  event_id      text unique not null,
+  esp_device_id text not null,
+  tap_log_id    uuid references public.tap_logs(id) on delete set null,
+  status        text not null default 'processed'
+    check (status in ('processed', 'failed', 'skipped')),
+  error_message text,
+  raw_payload   jsonb not null default '{}'::jsonb,
+  synced_at     timestamptz not null default now()
+);
+
+create table if not exists public.device_tokens (
+  id uuid primary key default gen_random_uuid (),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  fcm_token text not null,
+  platform text not null default 'android' check (platform in ('android', 'ios', 'web')),
+  device_name text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, fcm_token)
+);

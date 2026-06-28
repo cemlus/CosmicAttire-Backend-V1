@@ -103,6 +103,8 @@ begin
     new.id := old.id;
     new.mac_address := old.mac_address;
     new.shopkeeper_id := old.shopkeeper_id;
+    new.device_secret := old.device_secret;
+    new.hardware_uid := old.hardware_uid;
     new.created_at := old.created_at;
   end if;
 

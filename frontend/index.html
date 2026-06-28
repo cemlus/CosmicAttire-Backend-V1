@@ -3,72 +3,143 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Digital Profile</title>
-  <link rel="stylesheet" href="/style.css" />
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
-  />
-  <script src="/main.js" defer></script>
+  <title>Profile — Cosmic Attire</title>
+  <meta name="description" content="Digital profile card powered by CosmicAttire" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-    <video autoplay muted loop id="background-video">
-  <source src="/videos/k.mp4" type="video/mp4" />
-  Your browser does not support the video tag.
-</video>
 
-  <div class="profile-wrapper">
-    <div class="profile-card">
-      <div class="branding">
-        <div class="logo">
-          <i class="fas fa-user-circle"></i> Cosmic<span></span>Attire
+  <video autoplay muted loop playsinline id="bg-video">
+    <source src="/videos/k.mp4" type="video/mp4" />
+  </video>
+  <div id="bg-overlay"></div>
+
+  <main class="page-shell">
+    <div class="card" id="profile-card">
+
+      <!-- ── HERO ── -->
+      <section class="hero">
+        <div class="hero-top">
+          <span class="brand-wordmark"><i class="fas fa-user-circle"></i> Cosmic Attire</span>
+          <span class="tier-badge">
+            <i class="fas fa-check-circle"></i> Verified
+          </span>
         </div>
-        <div class="badge">User</div>
+
+        <div class="avatar-ring-wrap">
+          <div class="aura-ring"></div>
+          <div class="avatar-frame">
+            <img id="profile-image" src="" alt="Profile photo" />
+          </div>
+        </div>
+
+        <div class="hero-identity">
+          <h1 id="name">Your Name</h1>
+          <p id="role" class="role-label">Role</p>
+        </div>
+
+        <p id="profile-status" class="status-chip">
+          <i class="fas fa-circle-dot"></i> <span id="status-text">Loading...</span>
+        </p>
+      </section>
+
+      <!-- ── SOCIAL ROW ── -->
+      <div class="social-row">
+        <a id="instagram-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+          <i class="fab fa-instagram"></i>
+        </a>
+        <a id="linkedin-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+          <i class="fab fa-linkedin-in"></i>
+        </a>
+        <a id="whatsapp-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
+          <i class="fab fa-whatsapp"></i>
+        </a>
+        <a id="email-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Email">
+          <i class="fas fa-envelope"></i>
+        </a>
       </div>
 
-      <div class="profile-image-container">
-        <img id="profile-image" src="" alt="Profile Picture" />
+      <!-- ── TABS ── -->
+      <div class="tab-bar" role="tablist">
+        <button class="tab active" data-tab="bio" role="tab" aria-selected="true">About</button>
+        <button class="tab" data-tab="links" role="tab" aria-selected="false">Links</button>
+        <button class="tab" data-tab="contact" role="tab" aria-selected="false">Contact</button>
       </div>
 
-      <!-- ✅ FIXED SOCIAL ICONS: Now includes Instagram, WhatsApp, Email, LinkedIn -->
-      <div class="social-icons">
-        <a id="instagram-link" target="_blank"><i class="fab fa-instagram"></i></a>
-        <a id="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i></a>
-        <a id="email-link" target="_blank"><i class="fas fa-envelope"></i></a>
-        <a id="linkedin-link" target="_blank"><i class="fab fa-linkedin-in"></i></a>
+      <!-- ── TAB PANELS ── -->
+      <div class="tab-panels">
+
+        <!-- About -->
+        <div class="tab-panel active" id="panel-bio">
+          <p id="bio" class="bio-text">Loading bio…</p>
+          <div class="tags-row" id="tags-row"></div>
+        </div>
+
+        <!-- Links -->
+        <div class="tab-panel" id="panel-links">
+          <a href="#" id="link-website" class="link-row" target="_blank" rel="noopener noreferrer" style="display:none;">
+            <span class="link-icon"><i class="fas fa-globe"></i></span>
+            <span class="link-label">Portfolio / Website</span>
+            <i class="fas fa-arrow-right link-arrow"></i>
+          </a>
+          <a href="#" id="link-pitch" class="link-row" target="_blank" rel="noopener noreferrer" style="display:none;">
+            <span class="link-icon"><i class="fas fa-file-alt"></i></span>
+            <span class="link-label">Pitch Deck</span>
+            <i class="fas fa-arrow-right link-arrow"></i>
+          </a>
+          <a href="#" id="link-calendar" class="link-row" target="_blank" rel="noopener noreferrer" style="display:none;">
+            <span class="link-icon"><i class="fas fa-calendar-plus"></i></span>
+            <span class="link-label">Book a Meeting</span>
+            <i class="fas fa-arrow-right link-arrow"></i>
+          </a>
+          <p id="no-links-msg" class="bio-text" style="display:none;">No links available yet.</p>
+        </div>
+
+        <!-- Contact -->
+        <div class="tab-panel" id="panel-contact">
+          <div class="contact-card" id="contact-email-card" style="display:none;">
+            <i class="fas fa-envelope contact-icon"></i>
+            <div>
+              <p class="contact-field-label">Email</p>
+              <p id="contact-email" class="contact-field-value">—</p>
+            </div>
+          </div>
+          <div class="contact-card" id="contact-phone-card" style="display:none;">
+            <i class="fas fa-phone contact-icon"></i>
+            <div>
+              <p class="contact-field-label">Phone</p>
+              <p id="contact-phone" class="contact-field-value">—</p>
+            </div>
+          </div>
+          <div class="contact-card" id="contact-location-card" style="display:none;">
+            <i class="fas fa-map-marker-alt contact-icon"></i>
+            <div>
+              <p class="contact-field-label">Location</p>
+              <p id="contact-location" class="contact-field-value">—</p>
+            </div>
+          </div>
+          <p id="no-contact-msg" class="bio-text" style="display:none;">No contact info available.</p>
+        </div>
+
       </div>
 
-      <div class="profile-name-role">
-        <h1 id="name">Name</h1>
-        <p id="role">Role</p>
-        <p id="profile-status" class="profile-status">Waiting for backend...</p>
+      <!-- ── CTA ── -->
+      <div class="cta-row">
+        <button class="cta-secondary" id="connect-btn">
+          <i class="fas fa-user-plus"></i> Connect
+        </button>
+        <button class="cta-primary" id="save-contact-btn">
+          <i class="fas fa-address-card"></i> Save Contact
+        </button>
       </div>
 
-      <div class="verified-section">
-        <button class="verified-btn"><i class="fas fa-check-circle"></i> Verified</button>
-      </div>
-
-
-      <div class="bio-section">
-        <h3>Bio</h3>
-        <p id="bio">Loading bio...</p>
-      </div>
-<div class="divider"></div>
-
-      <!-- ✅ FIXED BUTTONS: Added anchor for portfolio -->
-      <div class="cta-buttons">
-        <button class="cta-btn dark">Connect</button>
-        <button class="cta-btn light" onclick="saveToPhone()">Save Contact</button>
-       <button id="pitch-deck-button" class="cta-btn dark">Pitch Deck</button>
-      </div>
-
-      <div class="bottom-nav">
-        <button>Home</button>
-        <button>Explore</button>
-        <button>Wvd</button>
-        <button>Settings</button>
-      </div>
     </div>
-  </div>
+  </main>
+
+  <script src="./main.js"></script>
 </body>
 </html>

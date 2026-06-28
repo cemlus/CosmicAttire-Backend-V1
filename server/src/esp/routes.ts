@@ -1,5 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getApprovedRingsForReader } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 
@@ -115,6 +115,9 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const { nfc_id, mac, timestamp, lat, lng } = payload;
 
     // 2. Validate timestamp (2 minute window / 120 seconds)
+    if (timestamp == null || typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
+      return sendFailedResponse(403, "ERROR: Clock drift too high or Replay detected");
+    }
     const now = Math.floor(Date.now() / 1000);
     const timeDiff = Math.abs(now - timestamp);
     if (timeDiff > 120) {
@@ -141,10 +144,16 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
 
     // 5. NFC Hardware ID Validation
     const reader = await getDeviceByMacAddress(mac);
-    const access = await getReaderAccess(nfc_id, reader.id);
-
-    if (!access) {
-      return sendFailedResponse(403, "ERROR: User not permitted on this reader");
+    if (reader) {
+      const access = await getReaderAccess(nfc_id, reader.id);
+      if (!access) {
+        return sendFailedResponse(403, "ERROR: User not permitted on this reader");
+      }
+    } else {
+      // Fallback: If device is not in payment_devices, check legacy verification_credentials gate NFC rule
+      if (credential.nfc_id && credential.nfc_id !== nfc_id) {
+        return sendFailedResponse(403, "ERROR: Hardware Tampered");
+      }
     }
 
     // 6. Check user permission (Must be "yes")
@@ -158,6 +167,23 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     const encryptedId = encrypt(userId?.user_id as string);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+
+    // 8. Record tap in tap_logs for conference tracking (fire-and-forget)
+    insertTapLog({
+      user_id: userId?.user_id as string,
+      nfc_id,
+      reader_mac: mac,
+      reader_label: credential?.label ?? null,
+      lat,
+      lng,
+      tapped_at: new Date(timestamp * 1000).toISOString(),
+      profile_link: verificationLink,
+      source: "realtime",
+      approved: true,
+    }).catch((err) => {
+      console.warn("⚠️  Failed to record tap_log (non-blocking):", (err as Error).message);
+    });
+
     const sendingPayload = {
       data: `SUCCESS:${verificationLink}`,
       isSuccess: 1
@@ -182,20 +208,28 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
   const isEncryptedRequest = typeof encryptedPayload === "string" && encryptedPayload.length > 0;
 
   const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
-    if (isEncryptedRequest) {
-      const text = typeof body === "string" ? body : JSON.stringify(body);
-      return res.status(statusCode).json({ data: encrypt(text) });
-    }
+    const isError = statusCode >= 400 || (typeof body === "string" && body.startsWith("ERROR:"));
+    const approvedVal = isError ? 0 : 1;
 
+    let responseObj: Record<string, any>;
     if (typeof body === "string") {
-      const isError = statusCode >= 400 || body.startsWith("ERROR:");
-      return res.status(statusCode).json({
+      responseObj = {
         status: isError ? "ERROR" : "SUCCESS",
+        isSuccess: approvedVal,
         message: body.replace(/^ERROR:\s*/, ""),
-      });
+      };
+    } else {
+      responseObj = {
+        ...body,
+        isSuccess: approvedVal,
+      };
     }
 
-    return res.status(statusCode).json(body);
+    if (isEncryptedRequest) {
+      return res.status(statusCode).json({ data: encrypt(JSON.stringify(responseObj)) });
+    }
+
+    return res.status(statusCode).json(responseObj);
   };
 
   try {
@@ -400,6 +434,156 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 });
 
 /**
+ * ✅ POST /verify-2
+ * Secure Atomic payment verification flow using stored procedure `process_payment`
+ */
+espRouter.post("/verify-2", async (req: Request, res: Response) => {
+  const { data: encryptedPayload } = req.body;
+  const isEncryptedRequest = typeof encryptedPayload === "string" && encryptedPayload.length > 0;
+
+  const sendPaymentResponse = (statusCode: number, body: string | Record<string, unknown>) => {
+    const isError = statusCode >= 400 || (typeof body === "string" && body.startsWith("ERROR:"));
+    const approvedVal = isError ? 0 : 1;
+
+    let responseObj: Record<string, any>;
+    if (typeof body === "string") {
+      responseObj = {
+        status: isError ? "ERROR" : "SUCCESS",
+        isSuccess: approvedVal,
+        message: body.replace(/^ERROR:\s*/, ""),
+      };
+    } else {
+      responseObj = {
+        ...body,
+        isSuccess: approvedVal,
+      };
+    }
+
+    if (isEncryptedRequest) {
+      return res.status(statusCode).json({ data: encrypt(JSON.stringify(responseObj)) });
+    }
+
+    return res.status(statusCode).json(responseObj);
+  };
+
+  try {
+    const decryptedPayload = isEncryptedRequest
+      ? decrypt(encryptedPayload)
+      : JSON.stringify(req.body);
+    const {
+      nfc_id,
+      mac_address,
+      shopkeeper_id,
+      amount,
+      timestamp,
+      lat,
+      lng,
+    } = JSON.parse(decryptedPayload as string);
+
+    if (
+      !nfc_id ||
+      !mac_address ||
+      !shopkeeper_id ||
+      amount == null ||
+      timestamp == null ||
+      lat == null ||
+      lng == null
+    ) {
+      console.error("❌ All credentials are not passed");
+      return sendPaymentResponse(400, "ERROR: Verification failed");
+    }
+
+    // checking timestamp and amount validity
+    const amountNum = Number(amount);
+    const tsNum = Number(timestamp);
+
+    if (!Number.isFinite(amountNum) || amountNum <= 0 || !Number.isInteger(amountNum)) {
+      return sendPaymentResponse(400, "ERROR: Invalid token amount");
+    }
+
+    if (!Number.isFinite(tsNum)) {
+      return sendPaymentResponse(400, "ERROR: Invalid timestamp");
+    }
+
+    // Accept either seconds or milliseconds
+    const nowMs = Date.now();
+    const payloadMs = tsNum > 1e12 ? tsNum : tsNum * 1000;
+    const timeDiff = Math.abs(nowMs - payloadMs);
+
+    if (timeDiff > 120000) {
+      return sendPaymentResponse(403, "ERROR: Clock drift too high or Replay detected");
+    }
+
+    // Check 2 -> Verify device
+    const paymentDevice = await getDeviceByMacAddress(mac_address);
+    if (!paymentDevice || paymentDevice.mac_address !== mac_address) {
+      return sendPaymentResponse(403, "ERROR: Payment device doesn't exist");
+    }
+
+    // Check 3 -> Verify shopkeeper matches the device
+    if (String(paymentDevice.shopkeeper_id) !== String(shopkeeper_id)) {
+      return sendPaymentResponse(403, "ERROR: Shopkeeper does not match device");
+    }
+
+    // Check 4 -> Ring validation
+    const ring = await getRingByRingId(nfc_id);
+    if (!ring || ring.ring_id !== nfc_id) {
+      return sendPaymentResponse(403, "ERROR: Invalid Ring");
+    }
+
+    const customerId = ring.user_id;
+    const user = await getUserIdByNFCId(nfc_id);
+    if (!user || String(user.user_id) !== String(customerId)) {
+      return sendPaymentResponse(403, "ERROR: Ring doesn't belong to user");
+    }
+
+    // Check 5 -> validate if ring is allowed for this reader
+    const access = await getReaderAccess(nfc_id, paymentDevice.id);
+    if (!access) {
+      return sendPaymentResponse(403, "ERROR: Ring is not authorized for this payment device");
+    }
+
+    // Check 6 -> Execute Secure Atomic Transaction Function on Database
+    const { data: rpcData, error: rpcError } = await (supabase as any).rpc("process_payment", {
+      p_customer_id: customerId,
+      p_shopkeeper_id: shopkeeper_id,
+      p_amount: amountNum,
+      p_ring_id: nfc_id,
+      p_mac_address: mac_address,
+      p_location: paymentDevice.location ?? null,
+    });
+
+    if (rpcError) {
+      console.error("❌ RPC Transaction failed:", rpcError.message);
+      return sendPaymentResponse(500, `ERROR: ${rpcError.message}`);
+    }
+
+    const rpcPayload = rpcData as {
+      status: string;
+      transaction_id: string;
+      balances: {
+        customer: { before: number; after: number };
+        shopkeeper: { before: number; after: number };
+      };
+    };
+
+    return sendPaymentResponse(200, {
+      status: "SUCCESS",
+      isSuccess: 1,
+      message: "Tokens transferred successfully",
+      transaction_id: rpcPayload.transaction_id,
+      customer_id: customerId,
+      shopkeeper_id,
+      amount: amountNum,
+      balances: rpcPayload.balances,
+    });
+  } catch (err) {
+    console.error("❌ Payment verification flow failed:", (err as Error).message);
+    return sendPaymentResponse(500, "ERROR: Payment verification flow failed");
+  }
+});
+
+/**
  * 🌍 Helper: Haversine formula for Geofencing
  */
 function getDistanceKM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -417,5 +601,37 @@ function getDistanceKM(lat1: number, lon1: number, lat2: number, lon2: number): 
 function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
 }
+
+/**
+ * GET /cache-sync
+ * Returns list of approved NFC IDs for a specific reader.
+ * Used by Reader ESP on boot to pre-populate its local approved-user cache.
+ *
+ * Query params:
+ *   reader_id (required) - UUID of the payment_device / reader
+ *
+ * Response: { approved: [{ nfc_id, user_id }] }
+ */
+espRouter.get("/cache-sync", async (req: Request, res: Response) => {
+  try {
+    const readerId = req.query.reader_id as string;
+
+    if (!readerId) {
+      return res.status(400).json({ error: "Missing required query param: reader_id" });
+    }
+
+    const approvedRings = await getApprovedRingsForReader(readerId);
+
+    return res.json({
+      reader_id: readerId,
+      approved: approvedRings,
+      count: approvedRings.length,
+      cached_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("❌ /cache-sync error:", (err as Error).message);
+    return res.status(500).json({ error: "Failed to fetch approved rings" });
+  }
+});
 
 export default espRouter;

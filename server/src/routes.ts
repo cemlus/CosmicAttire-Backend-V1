@@ -7,9 +7,15 @@ import {
     getUserById,
     getWalletByUserId,
     overrideUser,
+    getCurrentUserId,
 } from "./db/db.js";
 
+<<<<<<< HEAD
 import { decrypt } from "./encryptor.js";
+=======
+import { decrypt, encrypt } from "./encryptor.js";
+import { supabase } from "./db/supaBaseClient.js";
+>>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 // import  from "./adminRoutes.js";
 
 const router = express.Router();
@@ -43,6 +49,8 @@ router.get("/profile/:encryptedId", async (req: Request, res: Response) => {
         res.status(404).json({ error: "Invalid or expired profile link" });
     }
 });
+
+console.log(encrypt("36c973ef-a786-46ed-8be0-ecc4dc63ccc8"));
 
 /**
  * ✅ Public profile by username
@@ -89,7 +97,11 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
         if (!username) {
             return res.status(400).json({ error: "Invalid username" });
         }
-        const result = await updateTokenAmount(username, token, Number(new_token_amount));
+        const amount = Number(new_token_amount);
+        if (Number.isNaN(amount) || !Number.isFinite(amount)) {
+            return res.status(400).json({ error: "Invalid new_token_amount: must be a valid finite number" });
+        }
+        const result = await updateTokenAmount(username, token, amount);
         res.json(result);
     } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -176,6 +188,100 @@ router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);
 
+<<<<<<< HEAD
 // router.use('/organization', orgRouter)
+=======
+/**
+ * Generate a networking profile URL for a given userId.
+ * Encrypts the userId with AES and returns the full profile link.
+ *
+ * GET /api/networking-url/:userId
+ * Response: { url: "http://<host>/profile/<encryptedUserId>" }
+ */
+router.get("/networking-url/:userId", (req: Request, res: Response) => {
+    try {
+        const userId = req.params.userId as string;
+        if (!userId) {
+            return res.status(400).json({ error: "userId is required" });
+        }
+
+        const encryptedId = encrypt(userId);
+        if (!encryptedId) {
+            return res.status(500).json({ error: "Encryption failed" });
+        }
+
+        const protocol = req.protocol;
+        const host = req.get("host");
+        const profileUrl = `${protocol}://${host}/profile/${encodeURIComponent(encryptedId)}`;
+
+        res.status(200).json({ url: profileUrl });
+    } catch (err: any) {
+        console.error("❌ Networking URL generation error:", err.message);
+        res.status(500).json({ error: "Failed to generate networking URL" });
+    }
+});
+
+// router.use('/organization', orgRouter)
+
+// ─────────────────────────────────────────────────────
+// FCM Push Notifications - Device Tokens
+// ─────────────────────────────────────────────────────
+
+// POST /device-tokens — Register FCM token (called on app login)
+router.post("/device-tokens", async (req: Request, res: Response) => {
+  const userId = await getCurrentUserId(req);
+  if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { fcm_token, platform, device_name } = req.body;
+  if (!fcm_token) {
+      return res.status(400).json({ error: "Missing fcm_token" });
+  }
+
+  const { error } = await (supabase as any)
+    .from("device_tokens")
+    .upsert({
+      user_id: userId,
+      fcm_token,
+      platform: platform || "android",
+      device_name: device_name || null,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,fcm_token" });
+
+  if (error) {
+      console.error("❌ Failed to register device token:", error.message);
+      return res.status(500).json({ error: error.message });
+  }
+  return res.json({ message: "Token registered" });
+});
+
+// DELETE /device-tokens — Unregister on logout
+router.delete("/device-tokens", async (req: Request, res: Response) => {
+  const userId = await getCurrentUserId(req);
+  if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { fcm_token } = req.body;
+  if (!fcm_token) {
+      return res.status(400).json({ error: "Missing fcm_token" });
+  }
+
+  const { error } = await (supabase as any)
+    .from("device_tokens")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("fcm_token", fcm_token);
+
+  if (error) {
+      console.error("❌ Failed to deactivate device token:", error.message);
+      return res.status(500).json({ error: error.message });
+  }
+
+  return res.json({ message: "Token deactivated" });
+});
+>>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 
 export default router;

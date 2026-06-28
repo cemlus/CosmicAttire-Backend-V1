@@ -104,6 +104,8 @@ export type Database = {
       payment_devices: {
         Row: {
           created_at: string
+          device_secret: string | null
+          hardware_uid: string | null
           id: string
           location: string | null
           mac_address: string
@@ -114,6 +116,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          device_secret?: string | null
+          hardware_uid?: string | null
           id?: string
           location?: string | null
           mac_address: string
@@ -124,6 +128,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          device_secret?: string | null
+          hardware_uid?: string | null
           id?: string
           location?: string | null
           mac_address?: string
@@ -475,7 +481,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      process_payment: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_location: string
+          p_mac_address: string
+          p_ring_id: string
+          p_shopkeeper_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

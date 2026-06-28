@@ -43,6 +43,7 @@ const shopkeeperCard = document.getElementById("shopkeeper-card");
 const readyPanel = document.getElementById("ready-panel");
 const activityList = document.getElementById("activity-list");
 const activityCount = document.getElementById("activity-count");
+const tapStatusIndicator = document.getElementById("tap-status-indicator");
 
 let activeRequest = null;
 let selectedCounterKey = "";
@@ -151,11 +152,13 @@ async function simulateRingTap() {
 
     const result = await response.json().catch(() => null);
 
-    if (!response.ok || result?.status !== "SUCCESS") {
+    const approvedVal = result?.isSuccess ?? 0;
+    if (!response.ok || result?.status !== "SUCCESS" || approvedVal !== 1) {
       const message = result?.message || "Payment could not be completed.";
       setStatus("error", "Failed");
       requestState.textContent = "Payment failed";
       showMessage(paymentMessage, message, "error");
+      showTapStatus(false, `Denied: ${message}`);
       addActivity(`${counter.name} payment failed: ${message}`, "error");
       simulateButton.disabled = false;
       return;
@@ -196,6 +199,7 @@ async function applySuccessfulPayment(counter, result) {
   setStatus("ok", "Paid");
   requestState.textContent = "Payment complete";
   requestCopy.textContent = "Payment received. Create another request for the next customer.";
+  showTapStatus(true, "Approved");
   showMessage(paymentMessage, `${formatTokens(amount)} tokens received by ${counter.name}.`, "success");
   addActivity(`${counter.name} received ${formatTokens(amount)} tokens.`, "success");
   activeRequest = null;
@@ -211,6 +215,19 @@ function clearRequest() {
   setStatus("idle", "Ready");
   showMessage(setupMessage, "", "");
   showMessage(paymentMessage, "", "");
+  hideTapStatus();
+}
+
+function showTapStatus(approved, message) {
+  if (!tapStatusIndicator) return;
+  tapStatusIndicator.textContent = message;
+  tapStatusIndicator.className = approved ? "tap-status-indicator approved" : "tap-status-indicator denied";
+}
+
+function hideTapStatus() {
+  if (!tapStatusIndicator) return;
+  tapStatusIndicator.className = "tap-status-indicator hidden";
+  tapStatusIndicator.textContent = "";
 }
 
 async function fetchBalance(userId) {

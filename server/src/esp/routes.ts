@@ -1,5 +1,5 @@
 import express, { type Request, type Response, Router } from "express";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getApprovedRingsForReader } from "../db/db.js";
+import { getUserById, getUserIdByNFCId, getRingByRingId, getWalletByUserId, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getAccessCredentialByMac, getAccessReaderByMac, getAccessReaderAccess, getApprovedRingsForAccessReader } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
 import { creditWorkshopAttendanceIfAssigned } from "./workshopAttendance.js";
@@ -110,7 +110,16 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
     console.log("Encrypted payload:", encryptedPayload);
 
     const decrypted = decrypt(encryptedPayload);
-    const payload: ESPPayload = JSON.parse(decrypted as string);
+    if (!decrypted) {
+      return sendFailedResponse(400, "ERROR: Decryption failed: invalid or tampered payload");
+    }
+
+    let payload: ESPPayload;
+    try {
+      payload = JSON.parse(decrypted);
+    } catch {
+      return sendFailedResponse(400, "ERROR: Failed to parse decrypted payload");
+    }
     console.log("🔓 Decrypted ESP payload:", payload);
 
     const { nfc_id, mac, timestamp, lat, lng } = payload;
@@ -125,9 +134,11 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
       return sendFailedResponse(403, "ERROR: Clock drift too high or Replay detected");
     }
 
-    // 3. Lookup Hardware Credential and User in Supabase
+    // 3. Lookup Hardware Credential and User in Supabase — this is the
+    // access flow, so credential/reader lookups go against access_readers,
+    // not payment_devices (see supabase_migration_access_readers.sql).
     const [credential, userId] = await Promise.all([
-      getCredentialByMac(mac),
+      getAccessCredentialByMac(mac),
       getUserIdByNFCId(nfc_id)
     ])
 
@@ -149,21 +160,21 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
       return sendFailedResponse(403, "ERROR: Location Mismatch");
     }
 
-    // 5. NFC Hardware ID Validation — every registered reader is a
-    // payment_devices row now (verification_credentials no longer exists
-    // as a separate table), so the old "device not in payment_devices"
-    // fallback branch is unreachable and has been removed.
-    const reader = await getDeviceByMacAddress(mac);
+    // 5. NFC Hardware ID Validation — this is the access flow, so the
+    // reader is looked up in access_readers (not payment_devices) and its
+    // grant in access_reader_grants (not reader_access). See
+    // supabase_migration_access_readers.sql.
+    const reader = await getAccessReaderByMac(mac);
     if (!reader) {
       return sendFailedResponse(403, "ERROR: Unrecognized Hardware");
     }
-    // reader_access.ring_id is a real FK to rings.id now, not the raw NFC
-    // string — resolve the ring row first.
+    // access_reader_grants.ring_id is a real FK to rings.id — resolve the
+    // ring row first.
     const ring = await getRingByRingId(nfc_id);
     if (!ring || ring.nfc_uid !== nfc_id) {
       return sendFailedResponse(403, "ERROR: Invalid Ring");
     }
-    const access = await getReaderAccess(ring.id, reader.id);
+    const access = await getAccessReaderAccess(ring.id, reader.id);
     if (!access) {
       return sendFailedResponse(403, "ERROR: User not permitted on this reader");
     }
@@ -254,6 +265,9 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     const decryptedPayload = isEncryptedRequest
       ? decrypt(encryptedPayload)
       : JSON.stringify(req.body);
+    if (!decryptedPayload) {
+      return sendPaymentResponse(400, "ERROR: Decryption failed: invalid or tampered payload");
+    }
     const {
       nfc_id,
       mac_address,
@@ -490,6 +504,9 @@ espRouter.post("/verify-2", async (req: Request, res: Response) => {
     const decryptedPayload = isEncryptedRequest
       ? decrypt(encryptedPayload)
       : JSON.stringify(req.body);
+    if (!decryptedPayload) {
+      return sendPaymentResponse(400, "ERROR: Decryption failed: invalid or tampered payload");
+    }
     const {
       nfc_id,
       mac_address,
@@ -631,7 +648,7 @@ function deg2rad(deg: number): number {
  * Used by Reader ESP on boot to pre-populate its local approved-user cache.
  *
  * Query params:
- *   reader_id (required) - UUID of the payment_device / reader
+ *   reader_id (required) - UUID of the access_readers row
  *
  * Response: { approved: [{ nfc_id, user_id }] }
  */
@@ -643,7 +660,7 @@ espRouter.get("/cache-sync", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing required query param: reader_id" });
     }
 
-    const approvedRings = await getApprovedRingsForReader(readerId);
+    const approvedRings = await getApprovedRingsForAccessReader(readerId);
 
     return res.json({
       reader_id: readerId,

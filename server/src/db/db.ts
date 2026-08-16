@@ -253,15 +253,21 @@ export async function updateTokenAmount(cosmicId: string, token: string, newToke
  * supabase_migration_org_domain.sql) — one table per physical reader,
  * not two keyed on the same mac_address with a fallback lookup between them.
  */
-export async function getCredentialByMac(mac_address: string) {
-  const { data, error } = await supabase
-    .from("payment_devices")
+/**
+ * Access-flow twin of what used to be getCredentialByMac against
+ * payment_devices — that function had no other callers once this route
+ * moved to access_readers, so it was removed rather than kept unused. See
+ * supabase_migration_access_readers.sql for why the two tables are separate.
+ */
+export async function getAccessCredentialByMac(mac_address: string) {
+  const { data, error } = await (supabase as any)
+    .from("access_readers")
     .select("lat, lng, radius_m, label")
     .eq("mac_address", mac_address)
     .single();
 
   if (error || !data) {
-    console.warn("⚠️ MAC not found in payment_devices:", mac_address);
+    console.warn("⚠️ MAC not found in access_readers:", mac_address);
     return null;
   }
 
@@ -389,6 +395,28 @@ export async function getDeviceByMacAddress(
   return data;
 }
 
+/**
+ * Access-flow twin of getDeviceByMacAddress — queries access_readers
+ * instead of payment_devices. See supabase_migration_access_readers.sql.
+ */
+export async function getAccessReaderByMac(
+  macAddress: string
+) {
+  const { data, error } = await (supabase as any)
+    .from("access_readers")
+    .select("*")
+    .eq("mac_address", macAddress)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch access reader: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
 
 /**
  * ringId here is the rings.id UUID (reader_access.ring_id is a real FK to
@@ -409,6 +437,30 @@ export async function getReaderAccess(
   if (error) {
     throw new Error(
       `Failed to fetch reader access: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
+/**
+ * Access-flow twin of getReaderAccess — checks access_reader_grants
+ * (ring ↔ access_readers) instead of reader_access (ring ↔ payment_devices).
+ */
+export async function getAccessReaderAccess(
+  ringId: string,
+  readerId: string
+) {
+  const { data, error } = await (supabase as any)
+    .from("access_reader_grants")
+    .select("*")
+    .eq("ring_id", ringId)
+    .eq("reader_id", readerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch access reader grant: ${error.message}`
     );
   }
 
@@ -726,13 +778,15 @@ export async function getTapLogsByUser(userId: string) {
 }
 
 /**
- * Get all approved NFC ring UIDs for a specific reader.
- * Used by ESP on boot to warm its local approved-user cache.
+ * Get all approved NFC ring UIDs for a specific access reader. Used by ESP
+ * on boot to warm its local approved-user cache. Reads access_reader_grants
+ * / access_readers — the payment_devices/reader_access version this
+ * replaced had no other callers once /cache-sync moved here, so it was
+ * removed rather than kept unused (see supabase_migration_access_readers.sql).
  */
-export async function getApprovedRingsForReader(readerId: string) {
-  // 1. Get all ring UUIDs that have access to this reader
-  const { data: accessRows, error: accessError } = await supabase
-    .from("reader_access")
+export async function getApprovedRingsForAccessReader(readerId: string) {
+  const { data: accessRows, error: accessError } = await (supabase as any)
+    .from("access_reader_grants")
     .select("ring_id")
     .eq("reader_id", readerId);
 
@@ -740,9 +794,8 @@ export async function getApprovedRingsForReader(readerId: string) {
     return [];
   }
 
-  const ringUuids = accessRows.map((r) => r.ring_id);
+  const ringUuids = accessRows.map((r: { ring_id: string }) => r.ring_id);
 
-  // 2. Resolve each ring to its NFC hardware UID + owner
   const { data: rings, error: ringsError } = await supabase
     .from("rings")
     .select("nfc_uid, user_id")
@@ -752,7 +805,6 @@ export async function getApprovedRingsForReader(readerId: string) {
     return [];
   }
 
-  // 3. Check which users have permission = 'yes'
   const userIds = rings.map((r) => r.user_id);
   const { data: users, error: usersError } = await supabase
     .from("profiles")
@@ -766,9 +818,6 @@ export async function getApprovedRingsForReader(readerId: string) {
 
   const approvedUserIds = new Set(users.map((u) => u.user_id));
 
-  // 4. Return only rings whose users are approved, and which actually have
-  //    a recorded hardware UID (a ring claimed but not yet paired with
-  //    device_registry has no nfc_uid to cache).
   return rings
     .filter((r) => approvedUserIds.has(r.user_id) && r.nfc_uid)
     .map((r) => ({

@@ -1,7 +1,7 @@
 import { syncConfig } from "./syncConfig.js";
 import {
   getUserById,
-  getCredentialByMac,
+  getAccessCredentialByMac,
   getUserIdByNFCId,
   getProcessedEvent,
   insertSyncedEvent,
@@ -175,8 +175,10 @@ async function processIdentityTap(event: ESPTapEvent): Promise<boolean> {
 
   const userId = userResult.user_id;
 
-  // 3. Validate hardware (optional — reader may be known)
-  const credential = await getCredentialByMac(event.mac);
+  // 3. Validate hardware (optional — reader may be known). This is the
+  // access flow's offline/batch counterpart, so it looks up access_readers,
+  // not payment_devices — see supabase_migration_access_readers.sql.
+  const credential = await getAccessCredentialByMac(event.mac);
   const readerLabel = credential?.label ?? null;
 
   // 4. Check user permission

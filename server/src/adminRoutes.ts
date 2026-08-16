@@ -12,11 +12,7 @@ adminRouter.get(
     "/organizations/:organizationId",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId } = req.params;
-=======
             const { organizationId } = req.params as { organizationId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             const ctx = await requireOrgAccess(req, organizationId, [
                 "minor_admin",
                 "admin",
@@ -56,11 +52,7 @@ adminRouter.get(
     "/organizations/:organizationId/members",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId } = req.params;
-=======
             const { organizationId } = req.params as { organizationId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -72,20 +64,12 @@ adminRouter.get(
           user_id,
           role,
           created_at,
-<<<<<<< HEAD
-          users:user_id (
-            id,
-            username,
+          profiles:user_id (
+            user_id,
+            cosmic_id,
             email,
-            type,
-=======
-          user_profiles:user_id (
-            id:user_id,
-            username,
-            email,
-            role,
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
-            public_data
+            full_name,
+            app_role
           )
         `
                 )
@@ -114,11 +98,7 @@ adminRouter.get(
     "/organizations/:organizationId/transactions",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId } = req.params;
-=======
             const { organizationId } = req.params as { organizationId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -149,11 +129,7 @@ adminRouter.get(
     "/organizations/:organizationId/logs",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId } = req.params;
-=======
             const { organizationId } = req.params as { organizationId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             await requireOrgAccess(req, organizationId, ["minor_admin", "admin"]);
 
             const { data, error } = await supabase
@@ -185,11 +161,7 @@ adminRouter.post(
     "/organizations/:organizationId/members/minor-admins",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId } = req.params;
-=======
             const { organizationId } = req.params as { organizationId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             const { user_id } = req.body;
 
             if (!user_id) {
@@ -199,15 +171,9 @@ adminRouter.post(
             const ctx = await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { data: existingUser, error: userErr } = await supabase
-<<<<<<< HEAD
-                .from("users")
-                .select("id")
-                .eq("id", user_id)
-=======
-                .from("user_profiles")
+                .from("profiles")
                 .select("user_id")
                 .eq("user_id", user_id)
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
                 .maybeSingle();
 
             if (userErr) {
@@ -259,11 +225,7 @@ adminRouter.delete(
     "/organizations/:organizationId/members/minor-admins/:userId",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId, userId } = req.params;
-=======
             const { organizationId, userId } = req.params as { organizationId: string; userId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { error } = await supabase
@@ -296,11 +258,7 @@ adminRouter.post(
     "/organizations/:organizationId/readers/:readerId/access",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId, readerId } = req.params;
-=======
             const { organizationId, readerId } = req.params as { organizationId: string; readerId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             const { ring_id } = req.body;
 
             if (!ring_id) {
@@ -373,11 +331,7 @@ adminRouter.delete(
     "/organizations/:organizationId/readers/:readerId/access/:ringId",
     async (req: Request, res: Response) => {
         try {
-<<<<<<< HEAD
-            const { organizationId, readerId, ringId } = req.params;
-=======
             const { organizationId, readerId, ringId } = req.params as { organizationId: string; readerId: string; ringId: string };
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
             await requireOrgAccess(req, organizationId, ["admin"]);
 
             const { error } = await supabase

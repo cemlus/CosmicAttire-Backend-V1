@@ -61,3 +61,20 @@ export function decrypt(encoded: string): string | null {
         return null;
     }
 }
+
+/**
+ * Derives a per-ring NFC write-lock password from its hardware UID.
+ * Deterministic (same UID -> same password always) so re-pairing or an
+ * admin override can re-derive it without ever storing it anywhere — a
+ * generic NFC-write app has no way to guess it without this server's key.
+ * HMAC (not AES) and a domain-separated prefix keep this independent of
+ * the encrypt()/decrypt() usage above, even though the key is shared.
+ */
+export function deriveRingPassword(tagUid: string): { pwd: string; pack: string } {
+    const normalized = (tagUid || '').trim().toUpperCase();
+    const mac = crypto.createHmac('sha256', KEY).update(`ring-pwd:${normalized}`).digest();
+    return {
+        pwd: mac.subarray(0, 4).toString('hex'),
+        pack: mac.subarray(4, 6).toString('hex'),
+    };
+}

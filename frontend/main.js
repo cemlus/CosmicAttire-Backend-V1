@@ -17,18 +17,18 @@ function getTokenFromUrl() {
   return new URLSearchParams(window.location.search).get('token');
 }
 
+// ── Current profile data (set by populateProfile, read by saveToPhone) ──
+let currentProfileData = null;
+
 // ── Save Contact (vCard) ──
 
 function saveToPhone() {
-  const name  = document.getElementById('name')?.textContent || 'Unnamed';
-  const emailEl = document.getElementById('email-link');
-  const whatsappEl = document.getElementById('whatsapp-link');
-
-  const emailHref = emailEl?.href || '';
-  const phoneHref = whatsappEl?.href || '';
-
-  const email = emailHref.startsWith('mailto:') ? emailHref.replace('mailto:', '') : '';
-  const phone = phoneHref.match(/wa\.me\/(\d+)/)?.[1] || '';
+  const name = document.getElementById('name')?.textContent || 'Unnamed';
+  // Real phone and WhatsApp are different fields — pulling the number back
+  // out of the wa.me link conflated them and dropped the real phone
+  // entirely whenever it differed from (or was set without) WhatsApp.
+  const phone = currentProfileData?.phone || '';
+  const email = currentProfileData?.email || '';
 
   const vcf = [
     'BEGIN:VCARD',
@@ -50,6 +50,21 @@ function saveToPhone() {
   URL.revokeObjectURL(url);
 }
 
+// ── Social URL Helper ──
+// Values are stored as whatever a user typed — a bare handle ("@name"), a
+// domain without protocol ("instagram.com/name"), or a full URL. Setting
+// the raw DB value as the href directly (the previous behavior) produced
+// a broken link for anything but a fully-qualified URL.
+function normalizeSocialUrl(platformBase, value) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  if (trimmed.includes('.') && !trimmed.startsWith('@')) return `https://${trimmed}`;
+  return platformBase + trimmed.replace(/^@/, '');
+}
+
 // ── Status / Shell Helpers ──
 
 function setStatus(message) {
@@ -69,6 +84,8 @@ function setProfileShell(name, role, bio) {
 // ── Populate UI from API Data ──
 
 function populateProfile(data) {
+  currentProfileData = data;
+
   // ── Identity ──
   document.getElementById('name').textContent = data.name || 'Unnamed';
   document.getElementById('role').textContent  = data.role || 'Unknown';
@@ -94,8 +111,9 @@ function populateProfile(data) {
   const emailIcon = document.getElementById('email-link');
 
   if (instagram) {
-    if (data.instagram_url) {
-      instagram.href = data.instagram_url;
+    const url = normalizeSocialUrl('https://instagram.com/', data.instagram_url);
+    if (url) {
+      instagram.href = url;
       instagram.style.display = '';
     } else {
       instagram.style.display = 'none';
@@ -103,8 +121,9 @@ function populateProfile(data) {
   }
 
   if (linkedin) {
-    if (data.linkedin_url) {
-      linkedin.href = data.linkedin_url;
+    const url = normalizeSocialUrl('https://linkedin.com/in/', data.linkedin_url);
+    if (url) {
+      linkedin.href = url;
       linkedin.style.display = '';
     } else {
       linkedin.style.display = 'none';
@@ -162,6 +181,15 @@ function populateProfile(data) {
     }
   }
 
+  const linkResume = document.getElementById('link-resume');
+  if (linkResume) {
+    if (data.resume_url) {
+      linkResume.href = data.resume_url;
+      linkResume.style.display = '';
+      hasLinks = true;
+    }
+  }
+
   const linkCalendar = document.getElementById('link-calendar');
   if (linkCalendar) {
     if (data.calendar_url || data.booking_url) {
@@ -187,11 +215,22 @@ function populateProfile(data) {
     hasContact = true;
   }
 
+  // Real phone, not WhatsApp — they're different fields and this card was
+  // showing whatsapp_number under a "Phone" label regardless of whether a
+  // real phone was even set.
   const contactPhoneCard = document.getElementById('contact-phone-card');
   const contactPhone     = document.getElementById('contact-phone');
-  if (contactPhoneCard && data.whatsapp_number) {
-    contactPhone.textContent = data.whatsapp_number;
+  if (contactPhoneCard && data.phone) {
+    contactPhone.textContent = data.phone;
     contactPhoneCard.style.display = '';
+    hasContact = true;
+  }
+
+  const contactWhatsappCard = document.getElementById('contact-whatsapp-card');
+  const contactWhatsapp     = document.getElementById('contact-whatsapp');
+  if (contactWhatsappCard && data.whatsapp_number) {
+    contactWhatsapp.textContent = data.whatsapp_number;
+    contactWhatsappCard.style.display = '';
     hasContact = true;
   }
 
@@ -276,19 +315,31 @@ function initTabs() {
   });
 }
 
-// ── Connect Button Feedback ──
+// ── Connect Button ──
+// This visitor has no Cosmic Attire account, so there's no in-app request
+// to send — the honest version of "Connect" here is actually reaching out
+// via whatever contact info is on the profile, not a fake success
+// animation with no real effect behind it.
 
 function initConnectButton() {
   const btn = document.getElementById('connect-btn');
   if (!btn) return;
 
-  btn.addEventListener('click', function () {
-    this.innerHTML = '<i class="fas fa-check"></i> Connected!';
-    this.classList.add('connected');
-    setTimeout(() => {
-      this.innerHTML = '<i class="fas fa-user-plus"></i> Connect';
-      this.classList.remove('connected');
-    }, 2500);
+  btn.addEventListener('click', () => {
+    const data = currentProfileData;
+    const name = document.getElementById('name')?.textContent || 'this profile';
+
+    if (data?.email) {
+      const subject = encodeURIComponent(`Let's connect on Cosmic Attire`);
+      const body = encodeURIComponent(`Hi ${data.name || ''},\n\nI tapped your Cosmic ring and wanted to connect!`);
+      window.location.href = `mailto:${data.email}?subject=${subject}&body=${body}`;
+    } else if (data?.whatsapp_number) {
+      const number = data.whatsapp_number.replace(/\D/g, '');
+      const text = encodeURIComponent(`Hi ${data.name || ''}, I tapped your Cosmic ring and wanted to connect!`);
+      window.open(`https://wa.me/${number}?text=${text}`, '_blank', 'noopener,noreferrer');
+    } else {
+      alert(`${name} hasn't shared contact details yet — check the Links tab instead.`);
+    }
   });
 }
 

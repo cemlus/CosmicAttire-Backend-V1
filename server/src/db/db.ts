@@ -1,23 +1,60 @@
-import path from 'path';
 import { supabase } from './supaBaseClient.js';
 import { type Request } from "express";
+import { randomBytes } from 'crypto';
 
 /**
- * Helper: Extract name from the jsonb public_data field
+ * Maps the app's real `profiles` columns onto the response shape existing
+ * consumers (ESP firmware, the web profile page) already expect, so the
+ * database can use its own real column names (avatar_url, instagram, ...)
+ * without every downstream JSON contract needing to change in lockstep.
  */
-const getNameFromPublicData = (data: any): string => {
-  return data && typeof data === 'object' && 'name' in data
-    ? String(data.name).trim()
-    : "Unnamed User";
-};
+function serializeProfile(row: {
+  full_name?: string | null;
+  nickname?: string | null;
+  title?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
+  instagram?: string | null;
+  linkedin?: string | null;
+  twitter?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp_number?: string | null;
+  pitch_deck_url?: string | null;
+  resume_url?: string | null;
+  portfolio_url?: string | null;
+}) {
+  return {
+    name: row.full_name ?? null,
+    nickname: row.nickname ?? null,
+    // Wire format stays `role` — that's what frontend/main.js (and
+    // presumably the ESP firmware) already reads. Only the DB column
+    // renamed to `title`; the JSON key is exactly the stability contract
+    // this serializer exists to hold, so it doesn't change too.
+    role: row.title ?? null,
+    bio: row.bio ?? null,
+    image_url: row.avatar_url ?? null,
+    instagram_url: row.instagram ?? null,
+    linkedin_url: row.linkedin ?? null,
+    twitter: row.twitter ?? null,
+    // email/phone were never included — the web profile page's mail icon
+    // and Contact tab had nothing to render regardless of what a user set.
+    email: row.email ?? null,
+    phone: row.phone ?? null,
+    whatsapp_number: row.whatsapp_number ?? null,
+    pitch_deck_url: row.pitch_deck_url ?? null,
+    resume_url: row.resume_url ?? null,
+    portfolio_url: row.portfolio_url ?? null,
+  };
+}
 
 /**
  * ✅ Fetch user verification data by user_id
  */
 export async function getUserById(userId: string) {
   const { data: profile, error } = await supabase
-    .from("user_profiles") // Fixed table name
-    .select("permission, public_data, image_url")
+    .from("profiles")
+    .select("permission, full_name, avatar_url")
     .eq("user_id", userId)
     .single();
 
@@ -27,95 +64,127 @@ export async function getUserById(userId: string) {
   }
 
   return {
-    name: getNameFromPublicData(profile.public_data),
-    image_url: profile.image_url,
+    name: profile.full_name || "Unnamed User",
+    image_url: profile.avatar_url,
     permission: profile.permission,
     timestamp: new Date().toLocaleString()
   };
 }
 
 /**
- * ✅ Fetch profile by username (Directly, no redundant lookup)
+ * ✅ Fetch public profile by cosmic_id (the app's short shareable handle —
+ * there is no `username` column in the unified schema).
  */
-export async function getPublicProfileData(username: string) {
+export async function getPublicProfileData(cosmicId: string) {
   const { data: profile, error } = await supabase
-    .from('user_profiles') // Fixed table name
-    .select(`
-      public_data,
-      image_url,
-      instagram_url,
-      whatsapp_number,
-      linkedin_url,
-      pitch_deck_url
-    `)
-    .eq('username', username)
+    .from('profiles')
+    .select('full_name, nickname, title, bio, avatar_url, instagram, linkedin, twitter, email, phone, whatsapp_number, pitch_deck_url, resume_url, portfolio_url')
+    .eq('cosmic_id', cosmicId)
     .single();
 
   if (error || !profile) throw new Error('Profile not found');
 
-  return {
-    ...(profile.public_data as object || {}),
-    image_url: profile.image_url,
-    instagram_url: profile.instagram_url,
-    whatsapp_number: profile.whatsapp_number,
-    linkedin_url: profile.linkedin_url,
-    pitch_deck_url: profile.pitch_deck_url
-  };
+  return serializeProfile(profile);
 }
 
 /**
- * ✅ Fetch profile by username (Directly, no redundant lookup)
+ * ✅ Fetch public profile by user_id
  */
 export async function getPublicProfileDataById(userId: string) {
   const { data: profile, error } = await supabase
-    .from('user_profiles')
-    .select(`
-      public_data,
-      image_url,
-      instagram_url,
-      whatsapp_number,
-      linkedin_url,
-      pitch_deck_url
-    `)
+    .from('profiles')
+    .select('full_name, nickname, title, bio, avatar_url, instagram, linkedin, twitter, email, phone, whatsapp_number, pitch_deck_url, resume_url, portfolio_url')
     .eq('user_id', userId)
     .single();
+
   if (error || !profile) throw new Error('Profile not found');
 
-  return {
-    ...(profile.public_data as object || {}),
-    image_url: profile.image_url,
-    instagram_url: profile.instagram_url,
-    whatsapp_number: profile.whatsapp_number,
-    linkedin_url: profile.linkedin_url,
-    pitch_deck_url: profile.pitch_deck_url
-  };
+  return serializeProfile(profile);
 }
 
+const SHORT_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
+const SHORT_CODE_LENGTH = 6;
+
+function generateShortCode(): string {
+  const bytes = randomBytes(SHORT_CODE_LENGTH);
+  let code = '';
+  for (let i = 0; i < SHORT_CODE_LENGTH; i++) {
+    code += SHORT_CODE_ALPHABET[bytes[i]! % SHORT_CODE_ALPHABET.length];
+  }
+  return code;
+}
 
 /**
- * ✅ Fetch protected data with token validation
+ * Small NFC tags (e.g. NTAG213, ~137 usable bytes) can't hold the full
+ * AES-encrypted /profile/<encryptedId> URL — it regularly runs 140+ bytes
+ * once the domain is included. This hands back a short, stable /p/<code>
+ * URL instead: one random code per user, reused on repeat calls rather
+ * than growing a new row every time a ring gets (re-)written.
  */
-export async function getProtectedProfileData(username: string, token: string) {
+export async function getOrCreateShortCode(userId: string): Promise<string> {
+  const { data: existing, error: fetchError } = await (supabase as any)
+    .from('short_links')
+    .select('code')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (fetchError) throw new Error(`Failed to look up short link: ${fetchError.message}`);
+  if (existing?.code) return existing.code;
+
+  // Collisions are astronomically unlikely at this alphabet/length, but
+  // retry a few times on the primary-key conflict rather than assume.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateShortCode();
+    const { error: insertError } = await (supabase as any)
+      .from('short_links')
+      .insert({ code, user_id: userId });
+
+    if (!insertError) return code;
+    if (insertError.code !== '23505') { // unique_violation
+      throw new Error(`Failed to create short link: ${insertError.message}`);
+    }
+  }
+
+  throw new Error('Could not generate a unique short link. Please try again.');
+}
+
+/** Resolves a short /p/<code> link back to the user_id it belongs to. */
+export async function getUserIdByShortCode(code: string): Promise<string | null> {
+  const { data, error } = await (supabase as any)
+    .from('short_links')
+    .select('user_id')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data.user_id as string;
+}
+
+/**
+ * ✅ Fetch protected data with token validation.
+ * protected_profile_data has no app-side consumer today — preserved so this
+ * route keeps working, not because the feature is confirmed still wanted.
+ */
+export async function getProtectedProfileData(cosmicId: string, token: string) {
   const { data: profile, error } = await supabase
-    .from('user_profiles')
-    .select(`
-      public_data,
-      protected_data,
-      protected_url,
-      image_url,
-      instagram_url,
-      whatsapp_number,
-      linkedin_url,
-      pitch_deck_url
-    `)
-    .eq('username', username)
+    .from('profiles')
+    .select('user_id, full_name, nickname, title, bio, avatar_url, instagram, linkedin, twitter, email, phone, whatsapp_number, pitch_deck_url, resume_url, portfolio_url')
+    .eq('cosmic_id', cosmicId)
     .single();
 
   if (error || !profile) throw new Error('Profile not found');
+
+  const { data: protectedRow, error: protectedError } = await (supabase as any)
+    .from('protected_profile_data')
+    .select('protected_data, protected_url')
+    .eq('user_id', profile.user_id)
+    .maybeSingle();
+
+  if (protectedError) throw new Error('Profile not found');
 
   // Logic check: ensure token matches exactly in the protected_url
   try {
-    const url = new URL(profile.protected_url || "", "http://localhost");
+    const url = new URL(protectedRow?.protected_url || "", "http://localhost");
     const expectedToken = url.searchParams.get("token");
     if (!expectedToken || expectedToken !== token) {
       throw new Error('Invalid token');
@@ -125,29 +194,33 @@ export async function getProtectedProfileData(username: string, token: string) {
   }
 
   return {
-    ...(profile.public_data as object || {}),
-    ...(profile.protected_data as object || {}),
-    image_url: profile.image_url,
-    instagram_url: profile.instagram_url,
-    whatsapp_number: profile.whatsapp_number,
-    linkedin_url: profile.linkedin_url,
-    pitch_deck_url: profile.pitch_deck_url
+    ...serializeProfile(profile),
+    ...(protectedRow?.protected_data as object || {}),
   };
 }
 
 /**
- * ✅ Update token_amount inside the protected_data JSONB
+ * ✅ Update token_amount inside protected_profile_data.protected_data JSONB
  */
-export async function updateTokenAmount(username: string, token: string, newTokenAmount: number) {
+export async function updateTokenAmount(cosmicId: string, token: string, newTokenAmount: number) {
   const { data: profile, error: fetchError } = await supabase
-    .from('user_profiles')
-    .select('user_id, protected_data, protected_url')
-    .eq('username', username)
+    .from('profiles')
+    .select('user_id')
+    .eq('cosmic_id', cosmicId)
     .single();
 
   if (fetchError || !profile) throw new Error('Profile not found');
+
+  const { data: protectedRow, error: protectedError } = await (supabase as any)
+    .from('protected_profile_data')
+    .select('protected_data, protected_url')
+    .eq('user_id', profile.user_id)
+    .maybeSingle();
+
+  if (protectedError) throw new Error('Profile not found');
+
   try {
-    const url = new URL(profile.protected_url || "", "http://localhost");
+    const url = new URL(protectedRow?.protected_url || "", "http://localhost");
     const expectedToken = url.searchParams.get("token");
     if (!expectedToken || expectedToken !== token) {
       throw new Error('Invalid token');
@@ -156,16 +229,17 @@ export async function updateTokenAmount(username: string, token: string, newToke
     throw new Error('Invalid token');
   }
 
-  // Typed JSON update
   const updatedProtected = {
-    ...(profile.protected_data as object || {}),
+    ...(protectedRow?.protected_data as object || {}),
     token_amount: newTokenAmount
   };
 
-  const { error: updateError } = await supabase
-    .from('user_profiles')
-    .update({ protected_data: updatedProtected })
-    .eq('user_id', profile.user_id);
+  const { error: updateError } = await (supabase as any)
+    .from('protected_profile_data')
+    .upsert(
+      { user_id: profile.user_id, protected_data: updatedProtected },
+      { onConflict: 'user_id' }
+    );
 
   if (updateError) throw new Error('Failed to update token amount');
 
@@ -173,30 +247,39 @@ export async function updateTokenAmount(username: string, token: string, newToke
 }
 
 /**
- * Fetch verification credential by MAC address.
- * Returns: { lat, lng, radius_m, label } or null
- * It means that only a set number of NFC rings are being allowed by the ESP.
+ * Fetch geofence/verification data for a reader by MAC address.
+ * Was a separate `verification_credentials` table; those columns are now
+ * folded directly into `payment_devices` (see
+ * supabase_migration_org_domain.sql) — one table per physical reader,
+ * not two keyed on the same mac_address with a fallback lookup between them.
  */
 export async function getCredentialByMac(mac_address: string) {
   const { data, error } = await supabase
-    .from("verification_credentials")
-    .select("lat, lng, radius_m, label, nfc_id")
+    .from("payment_devices")
+    .select("lat, lng, radius_m, label")
     .eq("mac_address", mac_address)
     .single();
 
   if (error || !data) {
-    console.warn("⚠️ MAC not found in verification_credentials:", mac_address);
+    console.warn("⚠️ MAC not found in payment_devices:", mac_address);
     return null;
   }
 
   return data;
 }
 
+/**
+ * Resolve a scanned NFC chip UID to the user who owns that ring.
+ * rings.nfc_uid is the hardware UID a reader actually scans — NOT
+ * rings.ring_id, which is the printed ID a user types by hand
+ * (CSMID-AB12-CD34). Querying the wrong column here is exactly the bug
+ * the app/backend schema unification was meant to prevent.
+ */
 export async function getUserIdByNFCId(nfc_id: string) {
   const { data, error } = await supabase
     .from("rings")
     .select("user_id")
-    .eq("ring_id", nfc_id)
+    .eq("nfc_uid", nfc_id)
     .single();
 
   if (error || !data) {
@@ -207,12 +290,16 @@ export async function getUserIdByNFCId(nfc_id: string) {
   return data;
 }
 
-
-export async function getRingByRingId(ring_id: string) {
+/**
+ * Fetch a ring row by its NFC hardware UID (see getUserIdByNFCId above for
+ * why this queries nfc_uid, not ring_id, despite the function name kept
+ * for call-site stability).
+ */
+export async function getRingByRingId(nfc_id: string) {
   const { data, error } = await supabase
     .from("rings")
     .select("*")
-    .eq("ring_id", ring_id)
+    .eq("nfc_uid", nfc_id)
     .maybeSingle();
 
   if (error) {
@@ -239,27 +326,6 @@ export async function getWalletByUserId(user_id: string) {
   return data;
 }
 
-export async function getRingDeviceAccess(
-  ringId: string,
-  macAddress: string,
-  shopkeeperId: string
-) {
-  const { data, error } = await supabase
-    .from("ring_device_access")
-    .select("*")
-    .eq("ring_id", ringId)
-    .eq("mac_address", macAddress)
-    .eq("shopkeeper_id", shopkeeperId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to fetch ring device access: ${error.message}`);
-  }
-
-  return data;
-}
-
 export async function overrideUser(userId: string) {
   const user = await getUserById(userId);
 
@@ -274,7 +340,7 @@ export async function overrideUser(userId: string) {
   }
 
   const { error } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .update({ permission: 'no' })
     .eq('user_id', userId);
 
@@ -305,27 +371,6 @@ export async function getOrganizationById(organizationId: string) {
 }
 
 
-export async function getMembershipByUserAndOrg(
-  userId: string,
-  organizationId: string
-) {
-  const { data, error } = await supabase
-    .from("organization_memberships")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(
-      `Failed to fetch membership: ${error.message}`
-    );
-  }
-
-  return data;
-}
-
-
 export async function getDeviceByMacAddress(
   macAddress: string
 ) {
@@ -345,6 +390,11 @@ export async function getDeviceByMacAddress(
 }
 
 
+/**
+ * ringId here is the rings.id UUID (reader_access.ring_id is a real FK to
+ * rings, not the loose text column it used to be) — callers must resolve
+ * the NFC UID to a ring row (getRingByRingId) before calling this.
+ */
 export async function getReaderAccess(
   ringId: string,
   readerId: string
@@ -365,6 +415,58 @@ export async function getReaderAccess(
   return data;
 }
 
+
+/**
+ * Look up the workshop slot currently assigned to a reader (payment_devices
+ * row), if any. workshop_slots / reader_workshop_assignment are brand new
+ * tables not yet in the generated Supabase types — same stale-types gap as
+ * device_registry/tap_logs elsewhere in this file — so cast to any rather
+ * than blocking on a type regen.
+ */
+export async function getActiveWorkshopAssignmentForReader(readerId: string) {
+  const { data, error } = await (supabase as any)
+    .from("reader_workshop_assignment")
+    .select("workshop_slot_id, workshop_slots(event_slug, slot_number, points)")
+    .eq("reader_id", readerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch workshop assignment: ${error.message}`);
+  }
+
+  if (!data || !data.workshop_slots) {
+    return null;
+  }
+
+  return {
+    workshop_slot_id: data.workshop_slot_id as string,
+    event_slug: data.workshop_slots.event_slug as string,
+    slot_number: data.workshop_slots.slot_number as number,
+    points: data.workshop_slots.points as number,
+  };
+}
+
+/**
+ * Check whether a user is registered for a given event. event_registrations
+ * already exists in the schema but isn't in the generated Supabase types
+ * either — same stale-types gap as elsewhere in this file — so cast to any
+ * rather than blocking on a type regen. Returns a boolean rather than the
+ * raw row so callers don't need to know its shape.
+ */
+export async function isUserRegisteredForEvent(userId: string, eventSlug: string): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from("event_registrations")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("event_slug", eventSlug)
+    .maybeSingle();
+
+  if (error || !data) {
+    return false;
+  }
+
+  return true;
+}
 
 export async function getTransactionsByOrganizationId(
   organizationId: string
@@ -400,41 +502,18 @@ type MembershipRow = {
 
 export type UserRow = {
   user_id: string;
-  username: string;
-<<<<<<< HEAD
-  email: string;
-=======
+  cosmic_id: string | null;
   email: string | null;
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
-  type?: string | null;
-  public_data?: any;
+  app_role: "user" | "admin" | "super_admin";
 };
 
 
 export function isSuperAdmin(user: UserRow | null): boolean {
   if (!user) return false;
-
-  const typeValue = (user.type ?? "").toLowerCase();
-  const roleValue =
-    (user.public_data?.role ?? user.public_data?.type ?? "").toLowerCase();
-
-  return typeValue === "super_admin" || roleValue === "super_admin";
+  return user.app_role === "super_admin";
 }
 
 
-<<<<<<< HEAD
-export function getCurrentUserId(req: Request): string | null {
-  // Replace this with your existing auth middleware source of truth.
-  // Examples:
-  // req.user?.id
-  // req.auth?.userId
-  const user = (req as any).user;
-  return user?.id ?? null;
-}
-
-
-
-=======
 export async function getCurrentUserId(req: Request): Promise<string | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -451,11 +530,10 @@ export async function getCurrentUserId(req: Request): Promise<string | null> {
 }
 
 
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 export async function getCurrentUserRow(userId: string): Promise<UserRow | null> {
   const { data, error } = await supabase
-    .from("user_profiles")
-    .select("*")
+    .from("profiles")
+    .select("user_id, cosmic_id, email, app_role")
     .eq("user_id", userId)
     .single();
 
@@ -463,11 +541,7 @@ export async function getCurrentUserRow(userId: string): Promise<UserRow | null>
     throw new Error(`Failed to fetch current user: ${error.message}`);
   }
 
-<<<<<<< HEAD
-  return data;
-=======
   return data as UserRow | null;
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 }
 
 async function getMembership(
@@ -485,11 +559,7 @@ async function getMembership(
     throw new Error(`Failed to fetch membership: ${error.message}`);
   }
 
-<<<<<<< HEAD
-  return data;
-=======
   return data as MembershipRow | null;
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 }
 
 export async function requireOrgAccess(
@@ -502,11 +572,7 @@ export async function requireOrgAccess(
   membership: MembershipRow | null;
   superAdmin: boolean;
 }> {
-<<<<<<< HEAD
-  const actingUserId = getCurrentUserId(req);
-=======
   const actingUserId = await getCurrentUserId(req);
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
   if (!actingUserId) {
     throw new Error("Unauthorized");
   }
@@ -537,8 +603,6 @@ export async function requireOrgAccess(
     membership,
     superAdmin: false,
   };
-<<<<<<< HEAD
-=======
 }
 
 
@@ -582,7 +646,7 @@ export async function insertTapLog(tapLog: TapLogEntry) {
     .from("tap_logs")
     .insert({
       user_id: tapLog.user_id,
-      nfc_id: tapLog.nfc_id,
+      nfc_uid: tapLog.nfc_id,
       reader_mac: tapLog.reader_mac,
       reader_id: tapLog.reader_id ?? null,
       reader_label: tapLog.reader_label ?? null,
@@ -662,11 +726,11 @@ export async function getTapLogsByUser(userId: string) {
 }
 
 /**
- * Get all approved NFC ring IDs for a specific reader.
+ * Get all approved NFC ring UIDs for a specific reader.
  * Used by ESP on boot to warm its local approved-user cache.
  */
 export async function getApprovedRingsForReader(readerId: string) {
-  // 1. Get all ring_ids that have access to this reader
+  // 1. Get all ring UUIDs that have access to this reader
   const { data: accessRows, error: accessError } = await supabase
     .from("reader_access")
     .select("ring_id")
@@ -676,13 +740,13 @@ export async function getApprovedRingsForReader(readerId: string) {
     return [];
   }
 
-  const ringIds = accessRows.map((r) => r.ring_id);
+  const ringUuids = accessRows.map((r) => r.ring_id);
 
-  // 2. Resolve each ring_id to a user_id from the rings table
+  // 2. Resolve each ring to its NFC hardware UID + owner
   const { data: rings, error: ringsError } = await supabase
     .from("rings")
-    .select("ring_id, user_id")
-    .in("ring_id", ringIds);
+    .select("nfc_uid, user_id")
+    .in("id", ringUuids);
 
   if (ringsError || !rings) {
     return [];
@@ -691,7 +755,7 @@ export async function getApprovedRingsForReader(readerId: string) {
   // 3. Check which users have permission = 'yes'
   const userIds = rings.map((r) => r.user_id);
   const { data: users, error: usersError } = await supabase
-    .from("user_profiles")
+    .from("profiles")
     .select("user_id, permission")
     .in("user_id", userIds)
     .eq("permission", "yes");
@@ -702,12 +766,13 @@ export async function getApprovedRingsForReader(readerId: string) {
 
   const approvedUserIds = new Set(users.map((u) => u.user_id));
 
-  // 4. Return only rings whose users are approved
+  // 4. Return only rings whose users are approved, and which actually have
+  //    a recorded hardware UID (a ring claimed but not yet paired with
+  //    device_registry has no nfc_uid to cache).
   return rings
-    .filter((r) => approvedUserIds.has(r.user_id))
+    .filter((r) => approvedUserIds.has(r.user_id) && r.nfc_uid)
     .map((r) => ({
-      nfc_id: r.ring_id,
+      nfc_id: r.nfc_uid,
       user_id: r.user_id,
     }));
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 }

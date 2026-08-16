@@ -1,3 +1,16 @@
+// ============================================================================
+// HAND-AUTHORED, NOT GENERATED — pending real access.
+// This file is normally produced by `npm run update-types` (supabase gen
+// types) against the live project. As of the Phase 1 unification the server
+// was repointed at the app's Supabase project (duhujnznyacxpllmpyyz) instead
+// of the old backend project this was originally generated from, and that
+// project wasn't reachable to regenerate against. Every table/column below
+// was hand-matched against the actual migration SQL
+// (supabase_schema.sql + supabase_migration_*.sql in the app repo) rather
+// than introspected — re-run `npm run update-types` once the migrations
+// have actually been applied and drop this notice.
+// ============================================================================
+
 export type Json =
   | string
   | number
@@ -14,6 +27,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string
+          user_id: string
+          full_name: string | null
+          email: string | null
+          phone: string | null
+          age: string | null
+          title: string | null
+          app_role: string
+          bio: string | null
+          avatar_url: string | null
+          cosmic_id: string | null
+          nickname: string | null
+          instagram: string | null
+          linkedin: string | null
+          twitter: string | null
+          whatsapp_number: string | null
+          pitch_deck_url: string | null
+          resume_url: string | null
+          portfolio_url: string | null
+          permission: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          age?: string | null
+          title?: string | null
+          app_role?: string
+          bio?: string | null
+          avatar_url?: string | null
+          cosmic_id?: string | null
+          nickname?: string | null
+          instagram?: string | null
+          linkedin?: string | null
+          twitter?: string | null
+          whatsapp_number?: string | null
+          pitch_deck_url?: string | null
+          resume_url?: string | null
+          portfolio_url?: string | null
+          permission?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          age?: string | null
+          title?: string | null
+          app_role?: string
+          bio?: string | null
+          avatar_url?: string | null
+          cosmic_id?: string | null
+          nickname?: string | null
+          instagram?: string | null
+          linkedin?: string | null
+          twitter?: string | null
+          whatsapp_number?: string | null
+          pitch_deck_url?: string | null
+          resume_url?: string | null
+          portfolio_url?: string | null
+          permission?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       organization_memberships: {
         Row: {
           created_at: string
@@ -48,7 +136,7 @@ export type Database = {
             foreignKeyName: "organization_memberships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "user_profiles"
+            referencedRelation: "profiles"
             referencedColumns: ["user_id"]
           },
         ]
@@ -80,24 +168,21 @@ export type Database = {
       otp_verifications: {
         Row: {
           created_at: string
-          email_verified: boolean
-          phone_verified: boolean
-          updated_at: string
+          id: string
           user_id: string
+          verified: boolean
         }
         Insert: {
           created_at?: string
-          email_verified?: boolean
-          phone_verified?: boolean
-          updated_at?: string
+          id?: string
           user_id: string
+          verified?: boolean
         }
         Update: {
           created_at?: string
-          email_verified?: boolean
-          phone_verified?: boolean
-          updated_at?: string
+          id?: string
           user_id?: string
+          verified?: boolean
         }
         Relationships: []
       }
@@ -107,10 +192,14 @@ export type Database = {
           device_secret: string | null
           hardware_uid: string | null
           id: string
+          label: string | null
+          lat: number | null
+          lng: number | null
           location: string | null
           mac_address: string
           organization_id: string | null
-          reader_type: string | null
+          radius_m: number
+          reader_type: string
           shopkeeper_id: string
           updated_at: string
         }
@@ -119,10 +208,14 @@ export type Database = {
           device_secret?: string | null
           hardware_uid?: string | null
           id?: string
+          label?: string | null
+          lat?: number | null
+          lng?: number | null
           location?: string | null
           mac_address: string
           organization_id?: string | null
-          reader_type?: string | null
+          radius_m?: number
+          reader_type?: string
           shopkeeper_id: string
           updated_at?: string
         }
@@ -131,10 +224,14 @@ export type Database = {
           device_secret?: string | null
           hardware_uid?: string | null
           id?: string
+          label?: string | null
+          lat?: number | null
+          lng?: number | null
           location?: string | null
           mac_address?: string
           organization_id?: string | null
-          reader_type?: string | null
+          radius_m?: number
+          reader_type?: string
           shopkeeper_id?: string
           updated_at?: string
         }
@@ -185,46 +282,12 @@ export type Database = {
             referencedRelation: "payment_devices"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      ring_device_access: {
-        Row: {
-          created_at: string
-          id: string
-          mac_address: string
-          ring_id: string
-          shopkeeper_id: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          mac_address: string
-          ring_id: string
-          shopkeeper_id: string
-          status?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          mac_address?: string
-          ring_id?: string
-          shopkeeper_id?: string
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "ring_device_access_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "reader_access_ring_id_fkey"
+            columns: ["ring_id"]
             isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["user_id"]
+            referencedRelation: "rings"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -232,27 +295,33 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          nickname: string
+          nfc_uid: string | null
+          org_name: string | null
           ring_id: string
           status: string
+          last_sync: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          nickname?: string
+          nfc_uid?: string | null
+          org_name?: string | null
           ring_id: string
           status?: string
+          last_sync?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          nickname?: string
+          nfc_uid?: string | null
+          org_name?: string | null
           ring_id?: string
           status?: string
+          last_sync?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -269,12 +338,11 @@ export type Database = {
           merchant: string | null
           organization_id: string | null
           ring_id: string | null
-          status: string
           type: string
           user_id: string
         }
         Insert: {
-          amount: number
+          amount?: number
           category?: string | null
           created_at?: string
           description?: string | null
@@ -283,8 +351,7 @@ export type Database = {
           merchant?: string | null
           organization_id?: string | null
           ring_id?: string | null
-          status?: string
-          type: string
+          type?: string
           user_id: string
         }
         Update: {
@@ -297,7 +364,6 @@ export type Database = {
           merchant?: string | null
           organization_id?: string | null
           ring_id?: string | null
-          status?: string
           type?: string
           user_id?: string
         }
@@ -307,13 +373,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_ring_id_fkey"
-            columns: ["ring_id"]
-            isOneToOne: false
-            referencedRelation: "rings"
             referencedColumns: ["id"]
           },
         ]
@@ -353,124 +412,25 @@ export type Database = {
           },
         ]
       }
-      user_profiles: {
-        Row: {
-          bio: string | null
-          created_at: string
-          email: string | null
-          full_name: string | null
-          image_url: string | null
-          instagram_url: string | null
-          is_ticket_paid: boolean
-          linkedin_url: string | null
-          permission: string
-          pitch_deck_url: string | null
-          protected_data: Json
-          protected_url: string | null
-          public_data: Json
-          public_profile_url: string
-          role: string | null
-          updated_at: string
-          user_id: string
-          username: string
-          whatsapp_number: string | null
-        }
-        Insert: {
-          bio?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          image_url?: string | null
-          instagram_url?: string | null
-          is_ticket_paid?: boolean
-          linkedin_url?: string | null
-          permission?: string
-          pitch_deck_url?: string | null
-          protected_data?: Json
-          protected_url?: string | null
-          public_data?: Json
-          public_profile_url: string
-          role?: string | null
-          updated_at?: string
-          user_id: string
-          username: string
-          whatsapp_number?: string | null
-        }
-        Update: {
-          bio?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          image_url?: string | null
-          instagram_url?: string | null
-          is_ticket_paid?: boolean
-          linkedin_url?: string | null
-          permission?: string
-          pitch_deck_url?: string | null
-          protected_data?: Json
-          protected_url?: string | null
-          public_data?: Json
-          public_profile_url?: string
-          role?: string | null
-          updated_at?: string
-          user_id?: string
-          username?: string
-          whatsapp_number?: string | null
-        }
-        Relationships: []
-      }
-      verification_credentials: {
-        Row: {
-          created_at: string
-          id: number
-          label: string | null
-          lat: number
-          lng: number
-          mac_address: string
-          nfc_id: string | null
-          radius_m: number
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-          label?: string | null
-          lat: number
-          lng: number
-          mac_address: string
-          nfc_id?: string | null
-          radius_m?: number
-        }
-        Update: {
-          created_at?: string
-          id?: number
-          label?: string | null
-          lat?: number
-          lng?: number
-          mac_address?: string
-          nfc_id?: string | null
-          radius_m?: number
-        }
-        Relationships: []
-      }
       wallets: {
         Row: {
+          id: string
           balance: number
           created_at: string
-          currency: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          id?: string
           balance?: number
           created_at?: string
-          currency?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          id?: string
           balance?: number
           created_at?: string
-          currency?: string
           updated_at?: string
           user_id?: string
         }

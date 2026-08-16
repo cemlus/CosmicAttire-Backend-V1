@@ -1,20 +1,33 @@
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/*
+ * COSMIC ATTIRE — web profile card
+ * Ported from the app's real design system (src/themeColors.js):
+ * "Monochrome × Signal Red" — white canvas, ink-black structure, one red
+ * accent. Layout mirrors src/components/ProfileCard.js — the in-app
+ * equivalent of this exact page — full-bleed photo header with a rounded
+ * sheet overlapping it, not a small circular avatar in a colored card.
+ */
 :root {
-  --navy:       #080C1A;
-  --navy-mid:   #0E1428;
-  --navy-card:  #111827;
-  --navy-glass: rgba(17, 24, 39, 0.82);
-  --indigo:     #4F46E5;
-  --indigo-dim: rgba(79, 70, 229, 0.18);
-  --indigo-glow:rgba(79, 70, 229, 0.35);
-  --white:      #F8F8FF;
-  --muted:      #8891A5;
-  --subtle:     #1E2840;
-  --border:     rgba(255,255,255,0.07);
-  --radius-sm:  10px;
-  --radius-md:  16px;
+  --ink:          #0C0A09;
+  --charcoal:     #27272A;
+  --slate:        #57534E;
+  --red:          #DC2626;
+  --red-deep:     #B91C1C;
+  --red-light:    #EF4444;
+  --green:        #15803D;
+  --white:        #FFFFFF;
+  --surface:      #FAFAFA;
+  --card-elevated:#F5F5F4;
+  --text-secondary: #44403C;
+  --text-muted:   #78716C;
+  --border-subtle:  rgba(12,10,9,0.08);
+  --border-mid:     rgba(220,38,38,0.22);
+  --red-muted:      rgba(220,38,38,0.08);
+  --green-muted:    rgba(21,128,61,0.08);
+  --radius-sm:  12px;
+  --radius-md:  18px;
   --radius-lg:  28px;
   --font-display:'Sora', sans-serif;
   --font-body:  'Inter', sans-serif;
@@ -24,8 +37,8 @@
 html, body {
   height: 100%;
   font-family: var(--font-body);
-  background: var(--navy);
-  color: var(--white);
+  background: var(--surface);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -36,7 +49,7 @@ html, body {
   width: 100vw;
   height: 100vh;
   object-fit: cover;
-  opacity: 0.12;
+  opacity: 0.05;
   pointer-events: none;
   z-index: 0;
 }
@@ -44,7 +57,7 @@ html, body {
 #bg-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(79,70,229,0.14) 0%, transparent 70%);
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(220,38,38,0.06) 0%, transparent 70%);
   z-index: 1;
   pointer-events: none;
 }
@@ -64,11 +77,10 @@ html, body {
 .card {
   width: 100%;
   max-width: 420px;
-  background: var(--navy-glass);
-  border: 1px solid var(--border);
+  background: var(--white);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 24px 64px rgba(12,10,9,0.14);
   overflow: hidden;
   opacity: 0;
   transform: translateY(32px);
@@ -79,109 +91,94 @@ html, body {
   transform: translateY(0);
 }
 
-/* ── Hero ── */
-.hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 22px 24px 20px;
-  gap: 0;
-}
-
-.hero-top {
+/* ── Full-bleed photo header — enlarged, edge to edge, matches
+   ProfileCard.js's photoWrap (height 340 in the app). Web has more room. ── */
+.photo-wrap {
+  position: relative;
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 22px;
+  height: 420px;
+  background: var(--card-elevated);
 }
 
-.brand-wordmark {
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.brand-wordmark i { color: var(--indigo); }
-
-.tier-badge {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 5px 12px;
-  border-radius: 20px;
-  background: rgba(99, 220, 155, 0.12);
-  color: #63dc9b;
-  border: 1px solid rgba(99,220,155,0.22);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.tier-badge i { font-size: 0.68rem; }
-
-/* ── Avatar ── */
-.avatar-ring-wrap {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  margin-bottom: 16px;
-}
-
-.aura-ring {
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    var(--indigo) 0%,
-    transparent 40%,
-    var(--indigo) 70%,
-    transparent 100%
-  );
-  animation: spin 6s linear infinite;
-  opacity: 0.55;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.avatar-frame {
-  position: relative;
-  z-index: 1;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--subtle);
-  border: 3px solid var(--navy-card);
-}
-.avatar-frame img {
+.photo-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.photo-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12,10,9,0.42) 0%, transparent 28%, transparent 72%, rgba(12,10,9,0.10) 100%);
+  pointer-events: none;
+}
+
+.brand-wordmark {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  z-index: 1;
+}
+.brand-wordmark i { color: var(--red-light); }
+
+.tier-badge {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 6px 13px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.16);
+  color: var(--white);
+  border: 1px solid rgba(255,255,255,0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 1;
+}
+.tier-badge i { font-size: 0.7rem; color: #4ADE80; }
+
+/* ── Sheet — overlaps the photo, like the app's ProfileCard sheet
+   (marginTop: -28, borderTopLeftRadius/borderTopRightRadius: 32) ── */
+.sheet {
+  position: relative;
+  margin-top: -32px;
+  background: var(--white);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  padding: 24px 24px 4px;
 }
 
 /* ── Identity ── */
 .hero-identity {
-  text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .hero-identity h1 {
   font-family: var(--font-display);
-  font-size: 1.65rem;
-  font-weight: 700;
+  font-size: 1.7rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.1;
-  margin-bottom: 5px;
+  line-height: 1.15;
+  color: var(--ink);
+  margin-bottom: 4px;
 }
 .role-label {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 400;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 
@@ -191,16 +188,17 @@ html, body {
   align-items: center;
   gap: 6px;
   font-size: 0.76rem;
-  font-weight: 500;
-  color: #a5b4fc;
-  background: var(--indigo-dim);
-  border: 1px solid rgba(99, 102, 241, 0.25);
+  font-weight: 600;
+  color: var(--green);
+  background: var(--green-muted);
+  border: 1px solid rgba(21,128,61,0.22);
   border-radius: 20px;
   padding: 5px 14px;
+  margin-bottom: 18px;
 }
 .status-chip i {
   font-size: 0.55rem;
-  color: #818cf8;
+  color: var(--green);
   animation: pulse-dot 2s ease infinite;
 }
 @keyframes pulse-dot {
@@ -211,40 +209,39 @@ html, body {
 /* ── Social Row ── */
 .social-row {
   display: flex;
-  justify-content: center;
   gap: 10px;
-  padding: 6px 24px 18px;
+  padding-bottom: 20px;
 }
 
 .social-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: var(--subtle);
-  border: 1px solid var(--border);
-  color: var(--muted);
+  background: var(--card-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
   font-size: 1rem;
   text-decoration: none;
   transition: background var(--transition), color var(--transition), transform var(--transition), border-color var(--transition);
 }
 .social-pill:hover {
-  background: var(--indigo);
-  color: #fff;
-  border-color: var(--indigo);
+  background: var(--red);
+  color: var(--white);
+  border-color: var(--red);
   transform: translateY(-2px);
 }
 
 /* ── Tabs ── */
 .tab-bar {
   display: flex;
-  margin: 0 20px;
-  background: var(--subtle);
+  background: var(--card-elevated);
   border-radius: var(--radius-sm);
   padding: 4px;
   gap: 2px;
+  margin-bottom: 4px;
 }
 
 .tab {
@@ -252,23 +249,23 @@ html, body {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--muted);
+  color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 0.82rem;
-  font-weight: 500;
-  padding: 8px 0;
-  border-radius: 8px;
+  font-weight: 600;
+  padding: 9px 0;
+  border-radius: 9px;
   transition: background var(--transition), color var(--transition);
 }
-.tab:hover { color: var(--white); }
+.tab:hover { color: var(--ink); }
 .tab.active {
-  background: var(--indigo);
-  color: #fff;
+  background: var(--ink);
+  color: var(--white);
 }
 
 /* ── Tab Panels ── */
 .tab-panels {
-  padding: 18px 20px;
+  padding: 18px 0 12px;
   min-height: 140px;
 }
 
@@ -284,7 +281,7 @@ html, body {
 .bio-text {
   font-size: 0.9rem;
   line-height: 1.65;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin-bottom: 14px;
 }
 
@@ -295,12 +292,12 @@ html, body {
 }
 .tag {
   font-size: 0.73rem;
-  font-weight: 500;
+  font-weight: 600;
   padding: 4px 12px;
   border-radius: 20px;
-  background: var(--indigo-dim);
-  color: #a5b4fc;
-  border: 1px solid rgba(99,102,241,0.22);
+  background: var(--red-muted);
+  color: var(--red-deep);
+  border: 1px solid var(--border-mid);
   letter-spacing: 0.02em;
 }
 
@@ -311,16 +308,16 @@ html, body {
   gap: 14px;
   padding: 13px 14px;
   border-radius: var(--radius-sm);
-  background: var(--subtle);
-  border: 1px solid var(--border);
+  background: var(--card-elevated);
+  border: 1px solid var(--border-subtle);
   text-decoration: none;
-  color: var(--white);
+  color: var(--ink);
   margin-bottom: 10px;
   transition: background var(--transition), border-color var(--transition), transform var(--transition);
 }
 .link-row:hover {
-  background: rgba(79,70,229,0.15);
-  border-color: rgba(99,102,241,0.35);
+  background: var(--red-muted);
+  border-color: var(--border-mid);
   transform: translateX(3px);
 }
 
@@ -328,11 +325,11 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--indigo-dim);
+  background: var(--red-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #a5b4fc;
+  color: var(--red-deep);
   font-size: 0.9rem;
   flex-shrink: 0;
 }
@@ -340,15 +337,15 @@ html, body {
 .link-label {
   flex: 1;
   font-size: 0.88rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .link-arrow {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 0.75rem;
   transition: transform var(--transition);
 }
-.link-row:hover .link-arrow { transform: translateX(3px); color: #a5b4fc; }
+.link-row:hover .link-arrow { transform: translateX(3px); color: var(--red-deep); }
 
 /* Contact panel */
 .contact-card {
@@ -357,8 +354,8 @@ html, body {
   gap: 14px;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--subtle);
+  border: 1px solid var(--border-subtle);
+  background: var(--card-elevated);
   margin-bottom: 10px;
 }
 
@@ -366,11 +363,11 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--indigo-dim);
+  background: var(--red-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #a5b4fc;
+  color: var(--red-deep);
   font-size: 0.85rem;
   flex-shrink: 0;
   text-align: center;
@@ -379,23 +376,23 @@ html, body {
 
 .contact-field-label {
   font-size: 0.7rem;
-  color: var(--muted);
-  font-weight: 500;
+  color: var(--text-muted);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 2px;
 }
 .contact-field-value {
   font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--white);
+  font-weight: 600;
+  color: var(--ink);
 }
 
 /* ── CTA Buttons ── */
 .cta-row {
   display: flex;
   gap: 10px;
-  padding: 4px 20px 24px;
+  padding: 12px 0 24px;
 }
 
 .cta-primary,
@@ -405,38 +402,38 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 13px 0;
-  border-radius: var(--radius-sm);
+  padding: 14px 0;
+  border-radius: 999px;
   font-family: var(--font-body);
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   border: none;
   transition: background var(--transition), transform var(--transition), opacity var(--transition);
 }
 
 .cta-primary {
-  background: var(--indigo);
-  color: #fff;
+  background: var(--red);
+  color: var(--white);
 }
 .cta-primary:hover {
-  background: #4338ca;
+  background: var(--red-deep);
   transform: translateY(-1px);
 }
 .cta-primary:active { transform: scale(0.97); }
 
 .cta-secondary {
-  background: var(--subtle);
-  color: var(--white);
-  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink);
+  border: 1.5px solid var(--border-mid);
 }
 .cta-secondary:hover {
-  background: rgba(255,255,255,0.07);
+  background: var(--red-muted);
   transform: translateY(-1px);
 }
 .cta-secondary:active { transform: scale(0.97); }
 .cta-secondary.connected {
-  color: #63dc9b;
-  border-color: rgba(99,220,155,0.3);
-  background: rgba(99,220,155,0.08);
+  color: var(--green);
+  border-color: rgba(21,128,61,0.3);
+  background: var(--green-muted);
 }

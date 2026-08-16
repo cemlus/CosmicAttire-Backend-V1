@@ -8,14 +8,15 @@ import {
     getWalletByUserId,
     overrideUser,
     getCurrentUserId,
+    getCurrentUserRow,
+    isSuperAdmin,
+    getOrCreateShortCode,
+    requireOrgAccess,
 } from "./db/db.js";
 
-<<<<<<< HEAD
-import { decrypt } from "./encryptor.js";
-=======
-import { decrypt, encrypt } from "./encryptor.js";
+import { decrypt, encrypt, deriveRingPassword } from "./encryptor.js";
 import { supabase } from "./db/supaBaseClient.js";
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
+import { env } from "./config.js";
 // import  from "./adminRoutes.js";
 
 const router = express.Router();
@@ -50,19 +51,19 @@ router.get("/profile/:encryptedId", async (req: Request, res: Response) => {
     }
 });
 
-console.log(encrypt("36c973ef-a786-46ed-8be0-ecc4dc63ccc8"));
-
 /**
- * ✅ Public profile by username
+ * ✅ Public profile by cosmic_id — the app's short shareable handle. Route
+ * path kept as /u/:username for URL stability; the value itself is a
+ * cosmic_id now (there's no username column in the unified schema).
  */
 router.get("/u/:username", async (req: Request, res: Response) => {
     try {
-        const username = req.params.username as string;
-        const usernameRegex = /^[a-zA-Z0-9_]+$/;
-        if (!username || !usernameRegex.test(username)) {
-            return res.status(400).json({ error: "Invalid username format" });
+        const cosmicId = req.params.username as string;
+        const cosmicIdRegex = /^[a-zA-Z0-9_]+$/;
+        if (!cosmicId || !cosmicIdRegex.test(cosmicId)) {
+            return res.status(400).json({ error: "Invalid cosmic ID format" });
         }
-        const publicData = await getPublicProfileData(username);
+        const publicData = await getPublicProfileData(cosmicId);
         res.json({ publicData });
     } catch (err: any) {
         res.status(404).json({ error: err.message });
@@ -76,11 +77,11 @@ router.get("/u/:username/protected", async (req: Request, res: Response) => {
     try {
         const token = req.query.token as string;
         if (!token) throw new Error("Token is required");
-        const username = req.params.username as string;
-        if (!username) {
-            return res.status(400).json({ error: "Invalid username" });
+        const cosmicId = req.params.username as string;
+        if (!cosmicId) {
+            return res.status(400).json({ error: "Invalid cosmic ID" });
         }
-        const protectedData = await getProtectedProfileData(username, token);
+        const protectedData = await getProtectedProfileData(cosmicId, token);
         res.json({ protectedData });
     } catch (err: any) {
         res.status(401).json({ error: err.message });
@@ -93,15 +94,15 @@ router.get("/u/:username/protected", async (req: Request, res: Response) => {
 router.post("/u/:username/protected/update-token", async (req: Request, res: Response) => {
     try {
         const { token, new_token_amount } = req.body;
-        const username = req.params.username as string;
-        if (!username) {
-            return res.status(400).json({ error: "Invalid username" });
+        const cosmicId = req.params.username as string;
+        if (!cosmicId) {
+            return res.status(400).json({ error: "Invalid cosmic ID" });
         }
         const amount = Number(new_token_amount);
         if (Number.isNaN(amount) || !Number.isFinite(amount)) {
             return res.status(400).json({ error: "Invalid new_token_amount: must be a valid finite number" });
         }
-        const result = await updateTokenAmount(username, token, amount);
+        const result = await updateTokenAmount(cosmicId, token, amount);
         res.json(result);
     } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -109,10 +110,19 @@ router.post("/u/:username/protected/update-token", async (req: Request, res: Res
 });
 
 /**
- * ✅ Update permsission
+ * ✅ Revoke a user's access (admin-only — this used to accept any caller)
  */
 router.post('/override', async (req: Request, res: Response) => {
   try {
+    const actingUserId = await getCurrentUserId(req);
+    if (!actingUserId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const actingUser = await getCurrentUserRow(actingUserId);
+    if (!isSuperAdmin(actingUser)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const { userId } = req.body;
 
     if (!userId) {
@@ -188,9 +198,6 @@ router.get("/wallet/balance/:userId", async (req: Request, res: Response) => {
 router.get("/verify-user-by-id", verifyUserById);
 router.get("/verify-user-by-id/:encryptedId", verifyUserById);
 
-<<<<<<< HEAD
-// router.use('/organization', orgRouter)
-=======
 /**
  * Generate a networking profile URL for a given userId.
  * Encrypts the userId with AES and returns the full profile link.
@@ -211,13 +218,112 @@ router.get("/networking-url/:userId", (req: Request, res: Response) => {
         }
 
         const protocol = req.protocol;
-        const host = req.get("host");
+        const host = env.PUBLIC_LINK_DOMAIN || req.get("host");
         const profileUrl = `${protocol}://${host}/profile/${encodeURIComponent(encryptedId)}`;
 
         res.status(200).json({ url: profileUrl });
     } catch (err: any) {
         console.error("❌ Networking URL generation error:", err.message);
         res.status(500).json({ error: "Failed to generate networking URL" });
+    }
+});
+
+/**
+ * Same idea as /networking-url, but short enough to fit on small NFC tags
+ * (e.g. NTAG213, ~137 usable bytes) — the AES-encrypted /profile/<id> URL
+ * regularly runs 140+ bytes once the domain is included and won't fit.
+ *
+ * GET /api/short-url/:userId
+ * Response: { url: "http://<host>/p/<code>" }
+ */
+router.get("/short-url/:userId", async (req: Request, res: Response) => {
+    try {
+        const userId = req.params.userId as string;
+        if (!userId) {
+            return res.status(400).json({ error: "userId is required" });
+        }
+
+        const code = await getOrCreateShortCode(userId);
+        const protocol = req.protocol;
+        const host = env.PUBLIC_LINK_DOMAIN || req.get("host");
+        const shortUrl = `${protocol}://${host}/p/${code}`;
+
+        res.status(200).json({ url: shortUrl });
+    } catch (err: any) {
+        console.error("❌ Short URL generation error:", err.message);
+        res.status(500).json({ error: "Failed to generate short URL" });
+    }
+});
+
+/**
+ * Derives the NFC write-lock password for a ring's hardware UID, so the
+ * app can password-protect a tag right after writing its profile URL and
+ * unlock it again on legitimate re-pairing. Never stored — recomputed
+ * deterministically from the UID every time (see deriveRingPassword).
+ *
+ * Access rule: an unclaimed tag, or one already owned by the caller, is
+ * always derivable (normal pairing/re-pairing). A tag claimed by someone
+ * else requires the caller to be an admin/super_admin of that device's
+ * organization — this is what makes "other users can't overwrite a ring"
+ * hold even against a client that skips the app UI and calls this
+ * endpoint directly with someone else's tag UID.
+ *
+ * POST /api/ring-password
+ * Body: { tagUid: string }
+ * Response: { pwd: "aabbccdd", pack: "aabb" } (hex)
+ */
+router.post("/ring-password", async (req: Request, res: Response) => {
+    try {
+        const actingUserId = await getCurrentUserId(req);
+        if (!actingUserId) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const tagUid = String(req.body?.tagUid || "").trim().toUpperCase();
+        if (!tagUid) {
+            return res.status(400).json({ error: "tagUid is required" });
+        }
+
+        const { data: ring, error: ringErr } = await supabase
+            .from("rings")
+            .select("user_id")
+            .or(`ring_id.eq.${tagUid},nfc_uid.eq.${tagUid}`)
+            .maybeSingle();
+
+        if (ringErr) {
+            return res.status(500).json({ error: ringErr.message });
+        }
+
+        if (ring && ring.user_id !== actingUserId) {
+            // device_registry isn't in the generated Supabase types yet
+            // (same stale-types gap as elsewhere in this file) — cast to
+            // any rather than blocking on a type regen.
+            const { data: registryRow, error: registryErr } = await (supabase as any)
+                .from("device_registry")
+                .select("organization_id")
+                .eq("device_id", tagUid)
+                .maybeSingle();
+
+            if (registryErr) {
+                return res.status(500).json({ error: registryErr.message });
+            }
+            if (!registryRow?.organization_id) {
+                return res.status(403).json({ error: "This ring belongs to another account." });
+            }
+
+            try {
+                await requireOrgAccess(req, registryRow.organization_id, ["admin"]);
+            } catch (err: any) {
+                const status = err?.message === "Unauthorized" ? 401 : 403;
+                return res.status(status).json({ error: "This ring belongs to another account." });
+            }
+        }
+
+        const { pwd, pack } = deriveRingPassword(tagUid);
+        return res.json({ pwd, pack });
+    } catch (err: any) {
+        console.error("❌ ring-password error:", err.message);
+        return res.status(500).json({ error: "Failed to derive ring password" });
     }
 });
 
@@ -282,6 +388,5 @@ router.delete("/device-tokens", async (req: Request, res: Response) => {
 
   return res.json({ message: "Token deactivated" });
 });
->>>>>>> 2882df1563446e84d8edb83ccacbed5adc193036
 
 export default router;

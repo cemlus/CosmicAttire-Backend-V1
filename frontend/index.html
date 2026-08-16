@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 
@@ -21,22 +21,18 @@
   <main class="page-shell">
     <div class="card" id="profile-card">
 
-      <!-- ── HERO ── -->
-      <section class="hero">
-        <div class="hero-top">
-          <span class="brand-wordmark"><i class="fas fa-user-circle"></i> Cosmic Attire</span>
-          <span class="tier-badge">
-            <i class="fas fa-check-circle"></i> Verified
-          </span>
-        </div>
+      <!-- ── FULL-BLEED PHOTO — enlarged, matches ProfileCard.js's photoWrap ── -->
+      <div class="photo-wrap">
+        <img id="profile-image" src="" alt="Profile photo" />
+        <div class="photo-scrim"></div>
+        <span class="brand-wordmark"><i class="fas fa-user-circle"></i> Cosmic Attire</span>
+        <span class="tier-badge">
+          <i class="fas fa-check-circle"></i> Verified
+        </span>
+      </div>
 
-        <div class="avatar-ring-wrap">
-          <div class="aura-ring"></div>
-          <div class="avatar-frame">
-            <img id="profile-image" src="" alt="Profile photo" />
-          </div>
-        </div>
-
+      <!-- ── SHEET — overlaps the photo ── -->
+      <section class="sheet">
         <div class="hero-identity">
           <h1 id="name">Your Name</h1>
           <p id="role" class="role-label">Role</p>
@@ -45,23 +41,22 @@
         <p id="profile-status" class="status-chip">
           <i class="fas fa-circle-dot"></i> <span id="status-text">Loading...</span>
         </p>
-      </section>
 
-      <!-- ── SOCIAL ROW ── -->
-      <div class="social-row">
-        <a id="instagram-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
-          <i class="fab fa-instagram"></i>
-        </a>
-        <a id="linkedin-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
-          <i class="fab fa-linkedin-in"></i>
-        </a>
-        <a id="whatsapp-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
-          <i class="fab fa-whatsapp"></i>
-        </a>
-        <a id="email-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Email">
-          <i class="fas fa-envelope"></i>
-        </a>
-      </div>
+        <!-- ── SOCIAL ROW ── -->
+        <div class="social-row">
+          <a id="instagram-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+            <i class="fab fa-instagram"></i>
+          </a>
+          <a id="linkedin-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+            <i class="fab fa-linkedin-in"></i>
+          </a>
+          <a id="whatsapp-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
+            <i class="fab fa-whatsapp"></i>
+          </a>
+          <a id="email-link" class="social-pill" href="#" target="_blank" rel="noopener noreferrer" aria-label="Email">
+            <i class="fas fa-envelope"></i>
+          </a>
+        </div>
 
       <!-- ── TABS ── -->
       <div class="tab-bar" role="tablist">
@@ -91,6 +86,11 @@
             <span class="link-label">Pitch Deck</span>
             <i class="fas fa-arrow-right link-arrow"></i>
           </a>
+          <a href="#" id="link-resume" class="link-row" target="_blank" rel="noopener noreferrer" style="display:none;">
+            <span class="link-icon"><i class="fas fa-file-invoice"></i></span>
+            <span class="link-label">Resume / CV</span>
+            <i class="fas fa-arrow-right link-arrow"></i>
+          </a>
           <a href="#" id="link-calendar" class="link-row" target="_blank" rel="noopener noreferrer" style="display:none;">
             <span class="link-icon"><i class="fas fa-calendar-plus"></i></span>
             <span class="link-label">Book a Meeting</span>
@@ -115,6 +115,13 @@
               <p id="contact-phone" class="contact-field-value">—</p>
             </div>
           </div>
+          <div class="contact-card" id="contact-whatsapp-card" style="display:none;">
+            <i class="fab fa-whatsapp contact-icon"></i>
+            <div>
+              <p class="contact-field-label">WhatsApp</p>
+              <p id="contact-whatsapp" class="contact-field-value">—</p>
+            </div>
+          </div>
           <div class="contact-card" id="contact-location-card" style="display:none;">
             <i class="fas fa-map-marker-alt contact-icon"></i>
             <div>
@@ -136,10 +143,11 @@
           <i class="fas fa-address-card"></i> Save Contact
         </button>
       </div>
+      </section>
 
     </div>
   </main>
 
-  <script src="./main.js"></script>
+  <script src="/main.js"></script>
 </body>
 </html>

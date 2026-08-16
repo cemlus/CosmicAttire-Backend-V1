@@ -1,7 +1,8 @@
 import express, { type Request, type Response, Router } from "express";
-import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, getRingDeviceAccess, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getApprovedRingsForReader } from "../db/db.js";
+import { getUserById, getCredentialByMac, getUserIdByNFCId, getRingByRingId, getWalletByUserId, overrideUser, getDeviceByMacAddress, getReaderAccess, insertTapLog, getApprovedRingsForReader } from "../db/db.js";
 import { decrypt, encrypt } from "../encryptor.js";
 import { supabase } from "../db/supaBaseClient.js";
+import { creditWorkshopAttendanceIfAssigned } from "./workshopAttendance.js";
 
 const espRouter: Router = express.Router();
 
@@ -134,7 +135,13 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
       return sendFailedResponse(403, "ERROR: Unrecognized Hardware");
     }
 
-    // 4. Geofence Validation
+    // 4. Geofence Validation — lat/lng/radius_m live on payment_devices now
+    // (verification_credentials was merged in), and are nullable since not
+    // every reader has been geofenced yet. No geofence configured means
+    // this check can't be enforced — fail closed rather than skip it.
+    if (credential.lat == null || credential.lng == null) {
+      return sendFailedResponse(403, "ERROR: Reader has no geofence configured");
+    }
     const dist = getDistanceKM(lat, lng, credential.lat, credential.lng);
     const radiusKM = credential.radius_m / 1000;
 
@@ -142,18 +149,23 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
       return sendFailedResponse(403, "ERROR: Location Mismatch");
     }
 
-    // 5. NFC Hardware ID Validation
+    // 5. NFC Hardware ID Validation — every registered reader is a
+    // payment_devices row now (verification_credentials no longer exists
+    // as a separate table), so the old "device not in payment_devices"
+    // fallback branch is unreachable and has been removed.
     const reader = await getDeviceByMacAddress(mac);
-    if (reader) {
-      const access = await getReaderAccess(nfc_id, reader.id);
-      if (!access) {
-        return sendFailedResponse(403, "ERROR: User not permitted on this reader");
-      }
-    } else {
-      // Fallback: If device is not in payment_devices, check legacy verification_credentials gate NFC rule
-      if (credential.nfc_id && credential.nfc_id !== nfc_id) {
-        return sendFailedResponse(403, "ERROR: Hardware Tampered");
-      }
+    if (!reader) {
+      return sendFailedResponse(403, "ERROR: Unrecognized Hardware");
+    }
+    // reader_access.ring_id is a real FK to rings.id now, not the raw NFC
+    // string — resolve the ring row first.
+    const ring = await getRingByRingId(nfc_id);
+    if (!ring || ring.nfc_uid !== nfc_id) {
+      return sendFailedResponse(403, "ERROR: Invalid Ring");
+    }
+    const access = await getReaderAccess(ring.id, reader.id);
+    if (!access) {
+      return sendFailedResponse(403, "ERROR: User not permitted on this reader");
     }
 
     // 6. Check user permission (Must be "yes")
@@ -182,6 +194,12 @@ espRouter.post("/verify-user-by-id", async (req: Request, res: Response) => {
       approved: true,
     }).catch((err) => {
       console.warn("⚠️  Failed to record tap_log (non-blocking):", (err as Error).message);
+    });
+
+    // 9. Credit workshop attendance if this reader is currently assigned to
+    // a workshop slot (fire-and-forget, non-blocking — see workshopAttendance.ts)
+    creditWorkshopAttendanceIfAssigned(userId?.user_id as string, reader.id).catch((err) => {
+      console.warn("⚠️  Failed to credit workshop attendance (non-blocking):", (err as Error).message);
     });
 
     const sendingPayload = {
@@ -293,9 +311,12 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
 
     const organizationId = paymentDevice.organization_id;
 
-    // Check 4 -> Ring validation
+    // Check 4 -> Ring validation. ring_id here is the printed ID
+    // (CSMID-AB12-CD34); nfc_id is the hardware UID a reader actually
+    // scans — they're different values by design, so the ring must be
+    // resolved and checked against nfc_uid, not ring_id.
     const ring = await getRingByRingId(nfc_id);
-    if (!ring || ring.ring_id !== nfc_id) {
+    if (!ring || ring.nfc_uid !== nfc_id) {
       return sendPaymentResponse(403, "ERROR: Invalid Ring");
     }
 
@@ -306,7 +327,7 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
     }
 
     // Check 5 -> validate if ring is allowed for this reader
-    const access = await getReaderAccess(nfc_id, paymentDevice.id)
+    const access = await getReaderAccess(ring.id, paymentDevice.id)
     if (!access) {
       return sendPaymentResponse(403, "ERROR: Ring is not authorized for this payment device");
     }
@@ -380,7 +401,6 @@ espRouter.post("/verify", async (req: Request, res: Response) => {
         merchant: paymentDevice.mac_address,
         category: "payment",
         location: paymentDevice.location ?? null,
-        status: "completed",
       })
       .select("id")
       .single();
@@ -525,9 +545,12 @@ espRouter.post("/verify-2", async (req: Request, res: Response) => {
       return sendPaymentResponse(403, "ERROR: Shopkeeper does not match device");
     }
 
-    // Check 4 -> Ring validation
+    // Check 4 -> Ring validation. ring_id here is the printed ID
+    // (CSMID-AB12-CD34); nfc_id is the hardware UID a reader actually
+    // scans — they're different values by design, so the ring must be
+    // resolved and checked against nfc_uid, not ring_id.
     const ring = await getRingByRingId(nfc_id);
-    if (!ring || ring.ring_id !== nfc_id) {
+    if (!ring || ring.nfc_uid !== nfc_id) {
       return sendPaymentResponse(403, "ERROR: Invalid Ring");
     }
 
@@ -538,7 +561,7 @@ espRouter.post("/verify-2", async (req: Request, res: Response) => {
     }
 
     // Check 5 -> validate if ring is allowed for this reader
-    const access = await getReaderAccess(nfc_id, paymentDevice.id);
+    const access = await getReaderAccess(ring.id, paymentDevice.id);
     if (!access) {
       return sendPaymentResponse(403, "ERROR: Ring is not authorized for this payment device");
     }

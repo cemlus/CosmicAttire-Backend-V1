@@ -1,4 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from "express";
+import { Resend } from "resend";
 import {
     getPublicProfileData,
     getPublicProfileDataById,
@@ -12,6 +13,7 @@ import {
     isSuperAdmin,
     getOrCreateShortCode,
     requireOrgAccess,
+    registerDeviceId,
 } from "./db/db.js";
 
 import { decrypt, encrypt, deriveRingPassword } from "./encryptor.js";
@@ -139,6 +141,66 @@ router.post('/override', async (req: Request, res: Response) => {
     return res.status(400).json({
       error: err.message
     });
+  }
+});
+
+/**
+ * Registers a device ID ahead of the physical ring being handed out, and
+ * emails it directly to the intended recipient — a scalable alternative to
+ * manually inserting device_registry rows in the Supabase SQL editor.
+ * Admin-only, same gate as /override. Pass `deviceId` to register one
+ * that's already printed on a ring in hand; omit it to have the server
+ * generate a fresh CSMID-XXXX-XXXX one.
+ *
+ * POST /api/admin/assign-device
+ * Body: { email: string, orgName: string, deviceId?: string }
+ */
+router.post('/admin/assign-device', async (req: Request, res: Response) => {
+  try {
+    const actingUserId = await getCurrentUserId(req);
+    if (!actingUserId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const actingUser = await getCurrentUserRow(actingUserId);
+    if (!isSuperAdmin(actingUser)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { email, orgName, deviceId } = req.body ?? {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: "email is required" });
+    }
+    if (!orgName || typeof orgName !== 'string') {
+      return res.status(400).json({ error: "orgName is required" });
+    }
+    if (!env.RESEND_API_KEY) {
+      return res.status(500).json({ error: "Email sending is not configured on the server (RESEND_API_KEY missing)." });
+    }
+
+    const registeredId = await registerDeviceId(orgName, deviceId);
+
+    const resend = new Resend(env.RESEND_API_KEY);
+    const { error: emailError } = await resend.emails.send({
+      from: env.DEVICE_EMAIL_FROM,
+      to: email,
+      subject: 'Your Cosmic Device ID',
+      html: `
+        <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2 style="color: #DC2626;">Your Cosmic Device ID</h2>
+          <p>Use this ID to link your Cosmic ring in the app — go to <strong>Enter your Cosmic Device ID</strong> and type it in exactly as shown:</p>
+          <p style="font-size: 24px; font-weight: 800; letter-spacing: 2px; background: #f5f5f5; padding: 16px; border-radius: 8px; text-align: center;">${registeredId}</p>
+          <p style="color: #666; font-size: 13px;">Organization: ${orgName}</p>
+        </div>
+      `,
+    });
+
+    if (emailError) {
+      return res.status(502).json({ error: `Device registered but email failed to send: ${emailError.message}`, deviceId: registeredId });
+    }
+
+    return res.status(200).json({ deviceId: registeredId, email });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
   }
 });
 

@@ -160,6 +160,38 @@ export async function getUserIdByShortCode(code: string): Promise<string | null>
   return data.user_id as string;
 }
 
+const DEVICE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L, matches the app's short-code convention
+
+function randomSegment(length: number): string {
+  const bytes = randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += DEVICE_ID_ALPHABET[bytes[i]! % DEVICE_ID_ALPHABET.length];
+  }
+  return out;
+}
+
+/**
+ * Registers a device ID for pre-issuing a ring ahead of the physical unit
+ * being handed out — device_registry has no client-writable RLS policy at
+ * all (see supabase_migration_devices.sql), so this is the one path that
+ * can populate it outside the Supabase SQL editor. Generates a fresh
+ * CSMID-XXXX-XXXX style ID if none is supplied (matches the pattern shown
+ * as the placeholder in the app's own "Enter your Cosmic Device ID"
+ * screen), so a caller can either issue a brand-new ID or register one
+ * that's already printed on a physical ring in hand.
+ */
+export async function registerDeviceId(orgName: string, deviceId?: string): Promise<string> {
+  const id = (deviceId && deviceId.trim()) || `CSMID-${randomSegment(4)}-${randomSegment(4)}`;
+
+  const { error } = await (supabase as any)
+    .from('device_registry')
+    .upsert({ device_id: id, org_name: orgName }, { onConflict: 'device_id' });
+
+  if (error) throw new Error(`Failed to register device ID: ${error.message}`);
+  return id;
+}
+
 /**
  * ✅ Fetch protected data with token validation.
  * protected_profile_data has no app-side consumer today — preserved so this

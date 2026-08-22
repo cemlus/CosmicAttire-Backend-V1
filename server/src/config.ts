@@ -29,6 +29,12 @@ const envSchema = z.object({
     // (e.g. one exposed via ngrok during development). Off by default.
     LOCAL_WS_URL: z.string().url().optional(),
     LOCAL_WS_ENABLED: z.string().default("false"),
+    // Used by POST /api/admin/assign-device to email a newly-registered
+    // device ID directly to a user. Optional so the server still boots
+    // without it — the route itself returns a clear error if it's unset
+    // rather than the whole process failing at startup.
+    RESEND_API_KEY: z.string().optional(),
+    DEVICE_EMAIL_FROM: z.string().default("Cosmic Attire <noreply@cosmicattire.in>"),
 })
 
 export const env = envSchema.parse(process.env);

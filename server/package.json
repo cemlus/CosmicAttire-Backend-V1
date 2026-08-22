@@ -8,6 +8,7 @@
     "build": "tsc -b",
     "start": " tsc -b && node ./dist/index.js",
     "prettier": "prettier --write .",
+    "assign-device": "node scripts/assign-device.mjs",
     "update-types": "npx supabase gen types typescript --project-id xyltvcajyokdmicdobox --schema public > src/types/supabase.ts"
   },
   "repository": {

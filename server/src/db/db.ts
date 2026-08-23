@@ -1,6 +1,7 @@
 import { supabase } from './supaBaseClient.js';
 import { type Request } from "express";
 import { randomBytes } from 'crypto';
+import { env } from '../config.js';
 
 /**
  * Maps the app's real `profiles` columns onto the response shape existing
@@ -190,6 +191,103 @@ export async function registerDeviceId(orgName: string, deviceId?: string): Prom
 
   if (error) throw new Error(`Failed to register device ID: ${error.message}`);
   return id;
+}
+
+export type AutoProvisionResult = {
+  deviceId: string;
+  orgName: string;
+  email: string;
+  alreadyLinked: boolean;
+};
+
+/**
+ * Called right after a user finishes signing up — links an already-registered
+ * device_registry entry to their account directly (a `rings` row), so they
+ * never have to manually type an ID into "Enter your Cosmic Device ID".
+ * Idempotent: a user who already has a ring just gets that one back instead
+ * of a second one. Picks a device from the caller's own organization if
+ * they've joined one, otherwise from DEFAULT_DEVICE_ORG.
+ *
+ * Not fully race-safe under heavy concurrent signups (check-then-insert, no
+ * transaction) — same level of rigor as the existing manual-entry claim path
+ * in NFCCardSetup.js, which has the same gap. Acceptable at this event's
+ * scale; would need a `FOR UPDATE SKIP LOCKED` RPC to close entirely.
+ */
+export async function autoProvisionDevice(userId: string): Promise<AutoProvisionResult> {
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (profileErr) throw new Error(`Failed to load profile: ${profileErr.message}`);
+  if (!profile?.email) throw new Error('No email on file for this account yet.');
+
+  const { data: existingRing, error: existingErr } = await (supabase as any)
+    .from('rings')
+    .select('ring_id, org_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (existingErr) throw new Error(`Failed to check existing ring: ${existingErr.message}`);
+
+  if (existingRing) {
+    return {
+      deviceId: existingRing.ring_id,
+      orgName: (existingRing.org_name || '').trim(),
+      email: profile.email,
+      alreadyLinked: true,
+    };
+  }
+
+  let orgName = env.DEFAULT_DEVICE_ORG;
+  const { data: membership } = await (supabase as any)
+    .from('organization_memberships')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (membership?.organization_id) {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', membership.organization_id)
+      .maybeSingle();
+    if (org?.name?.trim()) orgName = org.name.trim();
+  }
+
+  const { data: registryRows, error: registryErr } = await (supabase as any)
+    .from('device_registry')
+    .select('device_id, org_name');
+  if (registryErr) throw new Error(`Failed to load device registry: ${registryErr.message}`);
+
+  const { data: ringRows, error: ringsErr } = await (supabase as any)
+    .from('rings')
+    .select('ring_id');
+  if (ringsErr) throw new Error(`Failed to load claimed rings: ${ringsErr.message}`);
+  const claimed = new Set((ringRows ?? []).map((r: any) => r.ring_id));
+
+  let candidates = (registryRows ?? []).filter(
+    (r: any) => !claimed.has(r.device_id) && (r.org_name || '').trim() === orgName
+  );
+  if (candidates.length === 0 && orgName !== env.DEFAULT_DEVICE_ORG) {
+    orgName = env.DEFAULT_DEVICE_ORG;
+    candidates = (registryRows ?? []).filter(
+      (r: any) => !claimed.has(r.device_id) && (r.org_name || '').trim() === orgName
+    );
+  }
+  if (candidates.length === 0) {
+    throw new Error('No device IDs are available to assign right now — contact an admin.');
+  }
+
+  const chosen = candidates[0];
+
+  const { error: insertErr } = await (supabase as any)
+    .from('rings')
+    .upsert(
+      { user_id: userId, ring_id: chosen.device_id, nfc_uid: chosen.device_id, status: 'active', org_name: orgName },
+      { onConflict: 'user_id,ring_id' }
+    );
+  if (insertErr) throw new Error(`Failed to link device: ${insertErr.message}`);
+
+  return { deviceId: chosen.device_id, orgName, email: profile.email, alreadyLinked: false };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
     getOrCreateShortCode,
     requireOrgAccess,
     registerDeviceId,
+    autoProvisionDevice,
 } from "./db/db.js";
 
 import { decrypt, encrypt, deriveRingPassword } from "./encryptor.js";
@@ -199,6 +200,48 @@ router.post('/admin/assign-device', async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({ deviceId: registeredId, email });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * Self-service — called by the app right after a signup finishes. Links an
+ * available device_registry entry straight to the caller's own account (no
+ * admin gate; the caller can only provision for themselves, via their own
+ * session token). Idempotent — a user who already has a ring just gets that
+ * one back. Best-effort confirmation email; a failed send doesn't fail the
+ * provisioning since the device is already linked by that point.
+ *
+ * POST /api/device/auto-provision
+ */
+router.post('/device/auto-provision', async (req: Request, res: Response) => {
+  try {
+    const actingUserId = await getCurrentUserId(req);
+    if (!actingUserId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await autoProvisionDevice(actingUserId);
+
+    if (!result.alreadyLinked && env.RESEND_API_KEY) {
+      const resend = new Resend(env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: env.DEVICE_EMAIL_FROM,
+        to: result.email,
+        subject: 'Your Cosmic ring is ready',
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #DC2626;">Your Cosmic ring is ready</h2>
+            <p>Your account is already linked to a Cosmic device — nothing to type in, you're all set:</p>
+            <p style="font-size: 24px; font-weight: 800; letter-spacing: 2px; background: #f5f5f5; padding: 16px; border-radius: 8px; text-align: center;">${result.deviceId}</p>
+            <p style="color: #666; font-size: 13px;">Organization: ${result.orgName}</p>
+          </div>
+        `,
+      }).catch(() => {}); // Best-effort — device is already linked regardless of email delivery.
+    }
+
+    return res.status(200).json({ deviceId: result.deviceId, orgName: result.orgName, alreadyLinked: result.alreadyLinked });
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }

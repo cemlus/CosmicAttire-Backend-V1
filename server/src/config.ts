@@ -35,6 +35,10 @@ const envSchema = z.object({
     // rather than the whole process failing at startup.
     RESEND_API_KEY: z.string().optional(),
     DEVICE_EMAIL_FROM: z.string().default("Cosmic Attire <noreply@cosmicattire.in>"),
+    // Fallback device_registry.org_name pool used by POST /api/device/auto-provision
+    // when a newly-signed-up user has no organization_memberships row yet
+    // (or their org has no spare device IDs left).
+    DEFAULT_DEVICE_ORG: z.string().default("COSMIC WEEK"),
 })
 
 export const env = envSchema.parse(process.env);

@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.log
+server/scripts/*.csv
+server/scripts/*.log

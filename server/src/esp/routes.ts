@@ -78,17 +78,24 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
     // 4. uid is the reader's own decrypted user_id — it reads the ring's
     // stored link and decrypts it on-device before sending, so no NFC/ring
     // lookup is needed here; uid IS the real profiles.user_id already.
+    const cardholder = await getUserById(uid);
+
+    // 4b. Permission gate — this endpoint was returning isSuccess: 1 for
+    // any resolvable account regardless of profiles.permission, so an
+    // explicitly "no" account still read as "access granted". Same check
+    // /verify-user-by-id already enforces.
+    if (!cardholder || cardholder.permission?.toLowerCase() !== "yes") {
+      return res.status(403).json({ error: "User Unauthorized", isSuccess: 0 });
+    }
+
     const encryptedId = encrypt(uid);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
 
-    // 5. Look up the cardholder's name for the response.
-    const cardholder = await getUserById(uid);
-
     const sendingPayload = {
       data: `SUCCESS:${verificationLink}`,
       isSuccess: 1,
-      name: cardholder?.name ?? null,
+      name: cardholder.name,
     }
 
     return res.json({

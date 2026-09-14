@@ -83,9 +83,16 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
     // 4b. Permission gate — this endpoint was returning isSuccess: 1 for
     // any resolvable account regardless of profiles.permission, so an
     // explicitly "no" account still read as "access granted". Same check
-    // /verify-user-by-id already enforces.
+    // /verify-user-by-id already enforces. Includes the name (when the
+    // account was found) so the reader can show who was denied, not just
+    // that someone was — a registered, known person blocked from this
+    // area reads differently than a completely unrecognized tag.
     if (!cardholder || cardholder.permission?.toLowerCase() !== "yes") {
-      return res.status(403).json({ error: "User Unauthorized", isSuccess: 0 });
+      return res.status(403).json({
+        error: "User Unauthorized",
+        isSuccess: 0,
+        name: cardholder?.name ?? null,
+      });
     }
 
     const encryptedId = encrypt(uid);

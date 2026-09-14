@@ -21,7 +21,9 @@ interface ESPTestPayload {
   uid: string;
   nfcid: string;
   device_id: string;
-  token: string;
+  timestamp: number;
+  lat: number;
+  lng: number;
 }
 
 espRouter.post("/test-2", async (req: Request, res: Response) => {
@@ -55,13 +57,22 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
     console.log("🔓 Decrypted ESP payload:", payload);
 
     // 3. Destructure and validate
-    const { uid, nfcid, device_id, token } = payload;
+    const { uid, nfcid, device_id, timestamp, lat, lng } = payload;
 
-    if (!uid || !nfcid || !device_id || !token) {
+    if (!uid || !nfcid || !device_id || timestamp == null || lat == null || lng == null) {
       return res.status(400).json({
-        error: "Invalid payload: missing required fields (uid, nfcid, device_id, token)",
+        error: "Invalid payload: missing required fields (uid, nfcid, device_id, timestamp, lat, lng)",
         received: payload,
       });
+    }
+
+    // 3b. Same replay/clock-drift window as /verify-user-by-id (120s).
+    if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
+      return res.status(403).json({ error: "Clock drift too high or Replay detected" });
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (Math.abs(now - timestamp) > 120) {
+      return res.status(403).json({ error: "Clock drift too high or Replay detected" });
     }
 
     // 4. Encrypt the UID symmetrically for the verification link

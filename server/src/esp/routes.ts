@@ -79,9 +79,17 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
     const encryptedId = encrypt(uid);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
+
+    // 5. Look up the cardholder's name — uid is expected to be a real
+    // profiles.user_id. Best-effort: a bad/unknown uid still returns the
+    // link (matches this endpoint's existing permissive behavior), just
+    // with no name attached, rather than failing the whole request.
+    const cardholder = await getUserById(uid);
+
     const sendingPayload = {
       data: `SUCCESS:${verificationLink}`,
-      isSuccess: 1
+      isSuccess: 1,
+      name: cardholder?.name ?? null,
     }
 
     return res.json({

@@ -75,26 +75,15 @@ espRouter.post("/test-2", async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Clock drift too high or Replay detected" });
     }
 
-    // 4. Resolve the real account from the hardware NFC UID. `uid` is NOT a
-    // Supabase user_id — production logs confirm every real tap sends the
-    // same raw hardware tag ID for both `uid` and `nfcid` — so treating it
-    // as a user_id always failed ("invalid input syntax for type uuid") and
-    // meant the verification link below never actually resolved to anyone.
-    // Resolving properly here (same lookup /verify-user-by-id already does
-    // correctly) fixes both the link and the name in one place.
-    const ringUser = await getUserIdByNFCId(nfcid);
-    if (!ringUser) {
-      return res.status(404).json({ error: "This tag isn't registered to any account." });
-    }
-    const resolvedUserId = ringUser.user_id;
-
-    // 5. Encrypt the real user id for the verification link.
-    const encryptedId = encrypt(resolvedUserId);
+    // 4. uid is the reader's own decrypted user_id — it reads the ring's
+    // stored link and decrypts it on-device before sending, so no NFC/ring
+    // lookup is needed here; uid IS the real profiles.user_id already.
+    const encryptedId = encrypt(uid);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const verificationLink = `${baseUrl}/verification-1/${encryptedId}`;
 
-    // 6. Look up the cardholder's name for the response.
-    const cardholder = await getUserById(resolvedUserId);
+    // 5. Look up the cardholder's name for the response.
+    const cardholder = await getUserById(uid);
 
     const sendingPayload = {
       data: `SUCCESS:${verificationLink}`,

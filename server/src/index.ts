@@ -24,10 +24,22 @@ app.set('trust proxy', 1);
 // Was app.use(cors()) — wide open to any origin on a service-role-backed API.
 // ESP32s and server-to-server calls send no Origin header and are unaffected;
 // this only gates browser requests (the dashboard, the app's web build).
+//
+// A fixed ALLOWED_ORIGINS list breaks every time the frontend runs somewhere
+// new — a different local dev port, or a Vercel deploy (which mints a fresh
+// *.vercel.app subdomain per preview/branch, not just one stable prod URL).
+// Rather than hand-maintain every port/URL that ever comes up, two origin
+// SHAPES are trusted unconditionally, alongside the explicit list below for
+// the eventual custom domain: any localhost/127.0.0.1 origin (any port —
+// dev-only, never reachable from the public internet), and any *.vercel.app
+// subdomain (Vercel only issues those to someone deploying under this
+// project's own account, not to an arbitrary attacker's page).
 const allowedOrigins = env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+const isLocalhostOrigin = (origin: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+const isVercelOrigin = (origin: string) => /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin);
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || isLocalhostOrigin(origin) || isVercelOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`Origin ${origin} not allowed by CORS`));
